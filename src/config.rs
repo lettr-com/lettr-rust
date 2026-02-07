@@ -1,28 +1,34 @@
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
-use reqwest::{Method, RequestBuilder};
+use reqwest::Method;
 
 const BASE_URL: &str = "https://app.lettr.com/api";
+
+// Use the correct reqwest types based on blocking feature.
+#[cfg(not(feature = "blocking"))]
+use reqwest::Client as HttpClient;
+#[cfg(feature = "blocking")]
+use reqwest::blocking::Client as HttpClient;
+
+#[cfg(not(feature = "blocking"))]
+pub(crate) type RequestBuilder = reqwest::RequestBuilder;
+#[cfg(feature = "blocking")]
+pub(crate) type RequestBuilder = reqwest::blocking::RequestBuilder;
+
+#[cfg(not(feature = "blocking"))]
+pub(crate) type Response = reqwest::Response;
+#[cfg(feature = "blocking")]
+pub(crate) type Response = reqwest::blocking::Response;
 
 /// Internal configuration for the Lettr HTTP client.
 #[derive(Debug, Clone)]
 pub(crate) struct Config {
-    http: reqwest::Client,
+    http: HttpClient,
     base_url: String,
 }
 
 impl Config {
     /// Creates a new [`Config`] with the given API key.
     pub fn new(api_key: &str) -> Self {
-        Self::with_client(api_key, reqwest::Client::new())
-    }
-
-    /// Creates a new [`Config`] with the given API key and a custom [`reqwest::Client`].
-    pub fn with_client(api_key: &str, client: reqwest::Client) -> Self {
-        // We'll set headers per-request since reqwest::Client doesn't allow
-        // modifying default headers after construction easily.
-        // Instead we store the client and set headers in `build`.
-        let _ = client;
-
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
@@ -35,7 +41,7 @@ impl Config {
             HeaderValue::from_static(concat!("lettr-rust/", env!("CARGO_PKG_VERSION"))),
         );
 
-        let http = reqwest::Client::builder()
+        let http = HttpClient::builder()
             .default_headers(headers)
             .build()
             .expect("Failed to build HTTP client");
@@ -59,22 +65,21 @@ impl Config {
     }
 
     /// Send a built request and handle non-success status codes.
+    ///
+    /// Returns the raw response on success, or an appropriate error.
     #[maybe_async::maybe_async]
-    pub async fn send(&self, request: RequestBuilder) -> crate::Result<reqwest::Response> {
+    pub async fn send(&self, request: RequestBuilder) -> crate::Result<Response> {
         let response = request.send().await?;
         let status = response.status();
 
         if status.is_success() {
             Ok(response)
         } else {
-            // Try to parse the error body
             let body = response.text().await.unwrap_or_default();
 
             match serde_json::from_str::<crate::error::RawErrorResponse>(&body) {
                 Ok(raw) => Err(raw.into_error()),
-                Err(_) => Err(crate::Error::Parse(format!(
-                    "HTTP {status}: {body}"
-                ))),
+                Err(_) => Err(crate::Error::Parse(format!("HTTP {status}: {body}"))),
             }
         }
     }
