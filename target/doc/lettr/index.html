@@ -1,0 +1,172 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="lettr"><title>lettr - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="lettr" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate lettr</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../lettr/index.html">lettr</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#lettr" title="lettr">lettr</a><ul><li><a href="#installation" title="Installation">Installation</a></li><li><a href="#quick-start" title="Quick Start">Quick Start</a></li><li><a href="#features" title="Features">Features</a></li><li><a href="#configuration" title="Configuration">Configuration</a></li><li><a href="#error-handling" title="Error Handling">Error Handling</a></li><li><a href="#license" title="License">License</a></li></ul></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>lettr</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/lettr/lib.rs.html#1-56">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="lettr"><a class="doc-anchor" href="#lettr">§</a>lettr</h2>
+<p>Official Rust SDK for the <a href="https://lettr.com">Lettr</a> Email API.</p>
+<p>Send transactional emails with tracking, attachments, and template personalization.</p>
+<p><a href="https://crates.io/crates/lettr"><img src="https://img.shields.io/crates/v/lettr.svg" alt="Crates.io" /></a>
+<a href="https://docs.rs/lettr"><img src="https://docs.rs/lettr/badge.svg" alt="Documentation" /></a>
+<a href="https://github.com/lettr/lettr-rust/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a></p>
+<h3 id="installation"><a class="doc-anchor" href="#installation">§</a>Installation</h3>
+<p>Add <code>lettr</code> to your <code>Cargo.toml</code>:</p>
+<div class="example-wrap"><pre class="language-toml"><code>[dependencies]
+lettr = &quot;0.1&quot;</code></pre></div>
+<p>Or with the Cargo CLI:</p>
+<div class="example-wrap"><pre class="language-sh"><code>cargo add lettr</code></pre></div><h3 id="quick-start"><a class="doc-anchor" href="#quick-start">§</a>Quick Start</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>lettr::{Lettr, CreateEmailOptions};
+
+<span class="attr">#[tokio::main]
+</span><span class="kw">async fn </span>main() -&gt; lettr::Result&lt;()&gt; {
+    <span class="kw">let </span>client = Lettr::new(<span class="string">"your-api-key"</span>);
+
+    <span class="kw">let </span>email = CreateEmailOptions::new(
+        <span class="string">"sender@example.com"</span>,
+        [<span class="string">"recipient@example.com"</span>],
+        <span class="string">"Hello from Lettr!"</span>,
+    )
+    .with_html(<span class="string">"&lt;h1&gt;Welcome!&lt;/h1&gt;&lt;p&gt;Thanks for signing up.&lt;/p&gt;"</span>)
+    .with_text(<span class="string">"Welcome! Thanks for signing up."</span>);
+
+    <span class="kw">let </span>response = client.emails.send(email).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="macro">println!</span>(<span class="string">"Email sent! Request ID: {}"</span>, response.request_id);
+
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div><h3 id="features"><a class="doc-anchor" href="#features">§</a>Features</h3><h4 id="send-emails"><a class="doc-anchor" href="#send-emails">§</a>Send Emails</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>lettr::{Lettr, CreateEmailOptions, Attachment};
+
+<span class="kw">let </span>client = Lettr::new(<span class="string">"your-api-key"</span>);
+
+<span class="comment">// Simple email
+</span><span class="kw">let </span>email = CreateEmailOptions::new(<span class="string">"from@example.com"</span>, [<span class="string">"to@example.com"</span>], <span class="string">"Hello!"</span>)
+    .with_html(<span class="string">"&lt;h1&gt;Hello World!&lt;/h1&gt;"</span>);
+
+client.emails.send(email).<span class="kw">await</span><span class="question-mark">?</span>;
+
+<span class="comment">// With all options
+</span><span class="kw">let </span>email = CreateEmailOptions::new(<span class="string">"from@example.com"</span>, [<span class="string">"to@example.com"</span>], <span class="string">"Welcome!"</span>)
+    .with_from_name(<span class="string">"Acme Inc"</span>)
+    .with_html(<span class="string">"&lt;h1&gt;Hello {{first_name}}!&lt;/h1&gt;"</span>)
+    .with_text(<span class="string">"Hello {{first_name}}!"</span>)
+    .with_reply_to(<span class="string">"support@example.com"</span>)
+    .with_substitution(<span class="string">"first_name"</span>, <span class="string">"John"</span>)
+    .with_metadata_entry(<span class="string">"user_id"</span>, <span class="string">"12345"</span>)
+    .with_click_tracking(<span class="bool-val">true</span>)
+    .with_open_tracking(<span class="bool-val">true</span>)
+    .with_attachment(Attachment::new(<span class="string">"invoice.pdf"</span>, <span class="string">"application/pdf"</span>, <span class="string">"base64data..."</span>));
+
+client.emails.send(email).<span class="kw">await</span><span class="question-mark">?</span>;</code></pre></div><h4 id="send-with-templates"><a class="doc-anchor" href="#send-with-templates">§</a>Send with Templates</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>lettr::{Lettr, CreateEmailOptions};
+
+<span class="kw">let </span>client = Lettr::new(<span class="string">"your-api-key"</span>);
+
+<span class="kw">let </span>email = CreateEmailOptions::new(<span class="string">"from@example.com"</span>, [<span class="string">"to@example.com"</span>], <span class="string">"Welcome!"</span>)
+    .with_template(<span class="string">"welcome-email"</span>)
+    .with_substitution(<span class="string">"first_name"</span>, <span class="string">"John"</span>)
+    .with_substitution(<span class="string">"company"</span>, <span class="string">"Acme Inc"</span>);
+
+client.emails.send(email).<span class="kw">await</span><span class="question-mark">?</span>;</code></pre></div><h4 id="list--retrieve-emails"><a class="doc-anchor" href="#list--retrieve-emails">§</a>List &amp; Retrieve Emails</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>lettr::Lettr;
+<span class="kw">use </span>lettr::emails::ListEmailsOptions;
+
+<span class="kw">let </span>client = Lettr::new(<span class="string">"your-api-key"</span>);
+
+<span class="comment">// List recent emails
+</span><span class="kw">let </span>options = ListEmailsOptions::new()
+    .per_page(<span class="number">10</span>)
+    .from_date(<span class="string">"2025-01-01"</span>);
+
+<span class="kw">let </span>emails = client.emails.list(options).<span class="kw">await</span><span class="question-mark">?</span>;
+<span class="kw">for </span>email <span class="kw">in </span><span class="kw-2">&amp;</span>emails.results {
+    <span class="macro">println!</span>(<span class="string">"{} -&gt; {}: {}"</span>, email.friendly_from, email.rcpt_to, email.subject);
+}
+
+<span class="comment">// Get email details by request ID
+</span><span class="kw">let </span>details = client.emails.get(<span class="string">"request-id"</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+<span class="kw">for </span>event <span class="kw">in </span><span class="kw-2">&amp;</span>details.results {
+    <span class="macro">println!</span>(<span class="string">"Event: {} at {}"</span>, event.event_type, event.timestamp);
+}</code></pre></div><h4 id="manage-domains"><a class="doc-anchor" href="#manage-domains">§</a>Manage Domains</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>lettr::Lettr;
+
+<span class="kw">let </span>client = Lettr::new(<span class="string">"your-api-key"</span>);
+
+<span class="comment">// List all domains
+</span><span class="kw">let </span>domains = client.domains.list().<span class="kw">await</span><span class="question-mark">?</span>;
+<span class="kw">for </span>domain <span class="kw">in </span><span class="kw-2">&amp;</span>domains {
+    <span class="macro">println!</span>(<span class="string">"{}: {} (can send: {})"</span>, domain.domain, domain.status, domain.can_send);
+}
+
+<span class="comment">// Register a new domain
+</span><span class="kw">let </span>result = client.domains.create(<span class="string">"example.com"</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+<span class="macro">println!</span>(<span class="string">"DKIM selector: {:?}"</span>, result.dkim);
+
+<span class="comment">// Get domain details
+</span><span class="kw">let </span>detail = client.domains.get(<span class="string">"example.com"</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+<span class="macro">println!</span>(<span class="string">"DKIM status: {:?}"</span>, detail.dkim_status);
+
+<span class="comment">// Delete a domain
+</span>client.domains.delete(<span class="string">"example.com"</span>).<span class="kw">await</span><span class="question-mark">?</span>;</code></pre></div><h4 id="webhooks"><a class="doc-anchor" href="#webhooks">§</a>Webhooks</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>lettr::Lettr;
+
+<span class="kw">let </span>client = Lettr::new(<span class="string">"your-api-key"</span>);
+
+<span class="kw">let </span>webhooks = client.webhooks.list().<span class="kw">await</span><span class="question-mark">?</span>;
+<span class="kw">for </span>webhook <span class="kw">in </span><span class="kw-2">&amp;</span>webhooks {
+    <span class="macro">println!</span>(<span class="string">"{}: {} (enabled: {})"</span>, webhook.id, webhook.url, webhook.enabled);
+}</code></pre></div><h4 id="templates"><a class="doc-anchor" href="#templates">§</a>Templates</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>lettr::Lettr;
+<span class="kw">use </span>lettr::templates::{ListTemplatesOptions, CreateTemplateOptions};
+
+<span class="kw">let </span>client = Lettr::new(<span class="string">"your-api-key"</span>);
+
+<span class="comment">// List templates
+</span><span class="kw">let </span>templates = client.templates.list(ListTemplatesOptions::new()).<span class="kw">await</span><span class="question-mark">?</span>;
+
+<span class="comment">// Create a template
+</span><span class="kw">let </span>template = CreateTemplateOptions::new(<span class="string">"Welcome Email"</span>)
+    .with_html(<span class="string">"&lt;h1&gt;Hello {{FIRST_NAME}}!&lt;/h1&gt;"</span>)
+    .with_project_id(<span class="number">5</span>);
+
+<span class="kw">let </span>result = client.templates.create(template).<span class="kw">await</span><span class="question-mark">?</span>;
+<span class="macro">println!</span>(<span class="string">"Created template: {} (slug: {})"</span>, result.name, result.slug);</code></pre></div><h3 id="configuration"><a class="doc-anchor" href="#configuration">§</a>Configuration</h3><h4 id="environment-variable"><a class="doc-anchor" href="#environment-variable">§</a>Environment Variable</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="comment">// Reads from LETTR_API_KEY environment variable
+</span><span class="kw">let </span>client = lettr::Lettr::from_env();</code></pre></div><h4 id="feature-flags"><a class="doc-anchor" href="#feature-flags">§</a>Feature Flags</h4><div><table><thead><tr><th>Feature</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>native-tls</code></td><td>Yes</td><td>Use the system’s native TLS stack</td></tr>
+<tr><td><code>rustls-tls</code></td><td>No</td><td>Use rustls for TLS</td></tr>
+<tr><td><code>blocking</code></td><td>No</td><td>Enable synchronous (blocking) API</td></tr>
+</tbody></table>
+</div><h5 id="blocking-api"><a class="doc-anchor" href="#blocking-api">§</a>Blocking API</h5>
+<p>Enable the <code>blocking</code> feature for synchronous usage:</p>
+<div class="example-wrap"><pre class="language-toml"><code>[dependencies]
+lettr = { version = &quot;0.1&quot;, features = [&quot;blocking&quot;] }</code></pre></div>
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>lettr::{Lettr, CreateEmailOptions};
+
+<span class="kw">fn </span>main() -&gt; lettr::Result&lt;()&gt; {
+    <span class="kw">let </span>client = Lettr::new(<span class="string">"your-api-key"</span>);
+
+    <span class="kw">let </span>email = CreateEmailOptions::new(<span class="string">"from@example.com"</span>, [<span class="string">"to@example.com"</span>], <span class="string">"Hello!"</span>)
+        .with_text(<span class="string">"Hello World!"</span>);
+
+    <span class="kw">let </span>response = client.emails.send(email)<span class="question-mark">?</span>;
+    <span class="macro">println!</span>(<span class="string">"Request ID: {}"</span>, response.request_id);
+
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div><h3 id="error-handling"><a class="doc-anchor" href="#error-handling">§</a>Error Handling</h3>
+<p>The SDK uses a unified <a href="error/enum.Error.html" title="enum lettr::error::Error"><code>Error</code></a> type that covers HTTP errors, API errors, and validation errors:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>lettr::{Lettr, CreateEmailOptions, Error};
+
+<span class="kw">let </span>client = Lettr::new(<span class="string">"your-api-key"</span>);
+
+<span class="kw">let </span>email = CreateEmailOptions::new(<span class="string">"from@example.com"</span>, [<span class="string">"to@example.com"</span>], <span class="string">"Hello!"</span>)
+    .with_html(<span class="string">"&lt;h1&gt;Hello!&lt;/h1&gt;"</span>);
+
+<span class="kw">match </span>client.emails.send(email).<span class="kw">await </span>{
+    <span class="prelude-val">Ok</span>(response) =&gt; <span class="macro">println!</span>(<span class="string">"Sent! ID: {}"</span>, response.request_id),
+    <span class="prelude-val">Err</span>(Error::Validation(e)) =&gt; {
+        <span class="macro">eprintln!</span>(<span class="string">"Validation failed: {}"</span>, e.message);
+        <span class="kw">for </span>(field, messages) <span class="kw">in </span><span class="kw-2">&amp;</span>e.errors {
+            <span class="macro">eprintln!</span>(<span class="string">"  {}: {:?}"</span>, field, messages);
+        }
+    }
+    <span class="prelude-val">Err</span>(Error::Api(e)) =&gt; <span class="macro">eprintln!</span>(<span class="string">"API error: {} ({:?})"</span>, e.message, e.error_code),
+    <span class="prelude-val">Err</span>(e) =&gt; <span class="macro">eprintln!</span>(<span class="string">"Error: {e}"</span>),
+}</code></pre></div><h3 id="license"><a class="doc-anchor" href="#license">§</a>License</h3>
+<p>MIT</p>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.Attachment"><code>pub use emails::<a class="struct" href="emails/struct.Attachment.html" title="struct lettr::emails::Attachment">Attachment</a>;</code></dt><dt id="reexport.CreateEmailOptions"><code>pub use emails::<a class="struct" href="emails/struct.CreateEmailOptions.html" title="struct lettr::emails::CreateEmailOptions">CreateEmailOptions</a>;</code></dt><dt id="reexport.Error"><code>pub use error::<a class="enum" href="error/enum.Error.html" title="enum lettr::error::Error">Error</a>;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="domains/index.html" title="mod lettr::domains">domains</a></dt><dt><a class="mod" href="emails/index.html" title="mod lettr::emails">emails</a></dt><dt><a class="mod" href="error/index.html" title="mod lettr::error">error</a></dt><dt><a class="mod" href="services/index.html" title="mod lettr::services">services</a></dt><dd>Re-exports of all service types for convenient access.</dd><dt><a class="mod" href="templates/index.html" title="mod lettr::templates">templates</a></dt><dt><a class="mod" href="types/index.html" title="mod lettr::types">types</a></dt><dd>Re-exports of commonly used request and response types.</dd><dt><a class="mod" href="webhooks/index.html" title="mod lettr::webhooks">webhooks</a></dt></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Lettr.html" title="struct lettr::Lettr">Lettr</a></dt><dd>The Lettr API client.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.Result.html" title="type lettr::Result">Result</a></dt><dd>Specialized <a href="type.Result.html" title="type lettr::Result"><code>Result</code></a> type for <a href="error/enum.Error.html" title="enum lettr::error::Error"><code>Error</code></a>.</dd></dl></section></div></main></body></html>
