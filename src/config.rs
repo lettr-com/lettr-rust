@@ -4,10 +4,10 @@ use reqwest::Method;
 const BASE_URL: &str = "https://app.lettr.com/api";
 
 // Use the correct reqwest types based on blocking feature.
-#[cfg(not(feature = "blocking"))]
-use reqwest::Client as HttpClient;
 #[cfg(feature = "blocking")]
 use reqwest::blocking::Client as HttpClient;
+#[cfg(not(feature = "blocking"))]
+use reqwest::Client as HttpClient;
 
 #[cfg(not(feature = "blocking"))]
 pub(crate) type RequestBuilder = reqwest::RequestBuilder;

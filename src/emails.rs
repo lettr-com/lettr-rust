@@ -267,7 +267,11 @@ impl CreateEmailOptions {
 
     /// Adds a substitution data key-value pair for template personalization.
     #[inline]
-    pub fn with_substitution(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+    pub fn with_substitution(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
         self.substitution_data
             .get_or_insert_with(HashMap::new)
             .insert(key.into(), value.into());
@@ -283,7 +287,11 @@ impl CreateEmailOptions {
 
     /// Adds a metadata key-value pair.
     #[inline]
-    pub fn with_metadata_entry(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+    pub fn with_metadata_entry(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
         self.metadata
             .get_or_insert_with(HashMap::new)
             .insert(key.into(), value.into());

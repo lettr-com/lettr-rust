@@ -33,7 +33,10 @@ impl TemplatesSvc {
     /// # }
     /// ```
     #[maybe_async::maybe_async]
-    pub async fn list(&self, options: ListTemplatesOptions) -> crate::Result<ListTemplatesResponse> {
+    pub async fn list(
+        &self,
+        options: ListTemplatesOptions,
+    ) -> crate::Result<ListTemplatesResponse> {
         let mut request = self.0.build(Method::GET, "/templates");
 
         if let Some(project_id) = options.project_id {
@@ -72,7 +75,10 @@ impl TemplatesSvc {
     /// # }
     /// ```
     #[maybe_async::maybe_async]
-    pub async fn create(&self, options: CreateTemplateOptions) -> crate::Result<CreateTemplateResponse> {
+    pub async fn create(
+        &self,
+        options: CreateTemplateOptions,
+    ) -> crate::Result<CreateTemplateResponse> {
         let request = self.0.build(Method::POST, "/templates").json(&options);
         let response = self.0.send(request).await?;
         let wrapper = response.json::<CreateTemplateResponseWrapper>().await?;

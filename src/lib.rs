@@ -44,8 +44,8 @@ pub mod types {
 
     // Templates
     pub use super::templates::{
-        CreateTemplateOptions, CreateTemplateResponse, ListTemplatesOptions,
-        ListTemplatesResponse, MergeTag, Template, TemplatePagination,
+        CreateTemplateOptions, CreateTemplateResponse, ListTemplatesOptions, ListTemplatesResponse,
+        MergeTag, Template, TemplatePagination,
     };
 
     // Errors
