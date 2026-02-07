@@ -15,6 +15,7 @@ documentation = "https://docs.rs/lettr"
 categories = ["email", "web-programming"]
 keywords = ["email", "lettr", "transactional-email"]
 description = "Official Rust SDK for the Lettr Email API."
+include = ["src/**/*", "Cargo.toml", "LICENSE", "README.md"]
 
 [features]
 default = ["native-tls"]
