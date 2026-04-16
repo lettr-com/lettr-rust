@@ -68,11 +68,18 @@ let email = CreateEmailOptions::new("from@example.com", ["to@example.com"], "Wel
     .with_from_name("Acme Inc")
     .with_html("<h1>Hello {{first_name}}!</h1>")
     .with_text("Hello {{first_name}}!")
+    .with_cc("cc@example.com")
+    .with_bcc("bcc@example.com")
     .with_reply_to("support@example.com")
+    .with_reply_to_name("Support Team")
+    .with_tag("welcome-series")
     .with_substitution("first_name", "John")
     .with_metadata_entry("user_id", "12345")
+    .with_header("X-Custom-ID", "abc-123")
     .with_click_tracking(true)
     .with_open_tracking(true)
+    .with_transactional(true)
+    .with_inline_css(true)
     .with_attachment(Attachment::new("invoice.pdf", "application/pdf", "base64data..."));
 
 client.emails.send(email).await?;
@@ -88,12 +95,43 @@ use lettr::{Lettr, CreateEmailOptions};
 # async fn run() -> lettr::Result<()> {
 let client = Lettr::new("your-api-key");
 
-let email = CreateEmailOptions::new("from@example.com", ["to@example.com"], "Welcome!")
-    .with_template("welcome-email")
-    .with_substitution("first_name", "John")
-    .with_substitution("company", "Acme Inc");
+// Subject is optional when using a template
+let email = CreateEmailOptions::new_with_template(
+    "from@example.com",
+    ["to@example.com"],
+    "welcome-email",
+)
+.with_substitution("first_name", "John")
+.with_substitution("company", "Acme Inc");
 
 client.emails.send(email).await?;
+# Ok(())
+# }
+```
+
+### Schedule Emails
+
+```rust,no_run
+use lettr::{Lettr, CreateEmailOptions};
+use lettr::emails::ScheduleEmailOptions;
+
+# async fn run() -> lettr::Result<()> {
+let client = Lettr::new("your-api-key");
+
+let email = CreateEmailOptions::new("from@example.com", ["to@example.com"], "Scheduled!")
+    .with_html("<h1>This was scheduled!</h1>");
+
+// Must be at least 5 minutes in the future, within 3 days
+let options = ScheduleEmailOptions::new(email, "2025-01-16T10:00:00Z");
+let response = client.emails.schedule(options).await?;
+println!("Scheduled! ID: {}", response.request_id);
+
+// Get scheduled email details
+let scheduled = client.emails.get_scheduled(&response.request_id).await?;
+println!("State: {}, Scheduled at: {:?}", scheduled.state, scheduled.scheduled_at);
+
+// Cancel a scheduled email
+client.emails.cancel_scheduled(&response.request_id).await?;
 # Ok(())
 # }
 ```
@@ -102,7 +140,7 @@ client.emails.send(email).await?;
 
 ```rust,no_run
 use lettr::Lettr;
-use lettr::emails::ListEmailsOptions;
+use lettr::emails::{ListEmailsOptions, ListEmailEventsOptions};
 
 # async fn run() -> lettr::Result<()> {
 let client = Lettr::new("your-api-key");
@@ -112,15 +150,26 @@ let options = ListEmailsOptions::new()
     .per_page(10)
     .from_date("2025-01-01");
 
-let emails = client.emails.list(options).await?;
-for email in &emails.results {
-    println!("{} -> {}: {}", email.friendly_from, email.rcpt_to, email.subject);
+let response = client.emails.list(options).await?;
+for item in &response.events.data {
+    println!("{}: {:?} -> {:?}", item.event_id, item.friendly_from, item.rcpt_to);
 }
 
 // Get email details by request ID
-let details = client.emails.get("request-id").await?;
-for event in &details.results {
-    println!("Event: {} at {}", event.event_type, event.timestamp);
+let detail = client.emails.get("request-id", None, None).await?;
+println!("State: {}, Recipients: {}", detail.state, detail.num_recipients);
+for event in &detail.events {
+    println!("  {} at {}", event.event_type, event.timestamp);
+}
+
+// List email events with filters
+let events = client.emails.list_events(
+    ListEmailEventsOptions::new()
+        .events(vec!["delivery".into(), "bounce".into()])
+        .per_page(25)
+).await?;
+for event in &events.events.data {
+    println!("{}: {} ({})", event.event_id, event.event_type, event.timestamp);
 }
 # Ok(())
 # }
@@ -144,9 +193,15 @@ for domain in &domains {
 let result = client.domains.create("example.com").await?;
 println!("DKIM selector: {:?}", result.dkim);
 
-// Get domain details
+// Get domain details (includes DMARC, SPF, DNS provider info)
 let detail = client.domains.get("example.com").await?;
-println!("DKIM status: {:?}", detail.dkim_status);
+println!("DKIM: {:?}, DMARC: {:?}, SPF: {:?}", detail.dkim_status, detail.dmarc_status, detail.spf_status);
+
+// Verify domain DNS configuration
+let verification = client.domains.verify("example.com").await?;
+println!("DKIM: {}, CNAME: {}, DMARC: {}, SPF: {}",
+    verification.dkim_status, verification.cname_status,
+    verification.dmarc_status, verification.spf_status);
 
 // Delete a domain
 client.domains.delete("example.com").await?;
@@ -158,14 +213,38 @@ client.domains.delete("example.com").await?;
 
 ```rust,no_run
 use lettr::Lettr;
+use lettr::webhooks::{CreateWebhookOptions, UpdateWebhookOptions};
 
 # async fn run() -> lettr::Result<()> {
 let client = Lettr::new("your-api-key");
 
+// List webhooks
 let webhooks = client.webhooks.list().await?;
 for webhook in &webhooks {
     println!("{}: {} (enabled: {})", webhook.id, webhook.url, webhook.enabled);
 }
+
+// Create a webhook
+let options = CreateWebhookOptions::new(
+    "Order Notifications",
+    "https://example.com/webhook",
+    "basic",
+    "selected",
+)
+.with_events(vec!["message.delivery".into(), "message.bounce".into()])
+.with_basic_auth("user", "secret");
+
+let webhook = client.webhooks.create(options).await?;
+println!("Created webhook: {}", webhook.id);
+
+// Update a webhook
+let options = UpdateWebhookOptions::new()
+    .with_name("Updated Webhook")
+    .with_active(false);
+client.webhooks.update(&webhook.id, options).await?;
+
+// Delete a webhook
+client.webhooks.delete(&webhook.id).await?;
 # Ok(())
 # }
 ```
@@ -174,21 +253,65 @@ for webhook in &webhooks {
 
 ```rust,no_run
 use lettr::Lettr;
-use lettr::templates::{ListTemplatesOptions, CreateTemplateOptions};
+use lettr::templates::{ListTemplatesOptions, CreateTemplateOptions, UpdateTemplateOptions};
 
 # async fn run() -> lettr::Result<()> {
 let client = Lettr::new("your-api-key");
 
 // List templates
-let templates = client.templates.list(ListTemplatesOptions::new()).await?;
+let response = client.templates.list(ListTemplatesOptions::new()).await?;
+for template in &response.templates {
+    println!("{}: {} (slug: {})", template.id, template.name, template.slug);
+}
 
 // Create a template
-let template = CreateTemplateOptions::new("Welcome Email")
+let options = CreateTemplateOptions::new("Welcome Email")
     .with_html("<h1>Hello {{FIRST_NAME}}!</h1>")
     .with_project_id(5);
 
-let result = client.templates.create(template).await?;
-println!("Created template: {} (slug: {})", result.name, result.slug);
+let result = client.templates.create(options).await?;
+println!("Created: {} (slug: {})", result.name, result.slug);
+
+// Get template details
+let detail = client.templates.get("welcome-email", None).await?;
+println!("Version: {:?}, HTML: {:?}", detail.active_version, detail.html.is_some());
+
+// Update a template
+let options = UpdateTemplateOptions::new()
+    .with_name("Updated Welcome")
+    .with_html("<h1>Hello {{NAME}}!</h1>");
+let updated = client.templates.update("welcome-email", options).await?;
+println!("Updated version: {}", updated.active_version);
+
+// Get merge tags
+let tags = client.templates.get_merge_tags("welcome-email", None, None).await?;
+for tag in &tags.merge_tags {
+    println!("{}: required={}", tag.key, tag.required);
+}
+
+// Get rendered HTML
+let html = client.templates.get_html(5, "welcome-email").await?;
+println!("HTML length: {}, Subject: {:?}", html.html.len(), html.subject);
+
+// Delete a template
+client.templates.delete("welcome-email", None).await?;
+# Ok(())
+# }
+```
+
+### Projects
+
+```rust,no_run
+use lettr::Lettr;
+use lettr::projects::ListProjectsOptions;
+
+# async fn run() -> lettr::Result<()> {
+let client = Lettr::new("your-api-key");
+
+let response = client.projects.list(ListProjectsOptions::new()).await?;
+for project in &response.projects {
+    println!("{}: {}", project.id, project.name);
+}
 # Ok(())
 # }
 ```
@@ -261,6 +384,38 @@ match client.emails.send(email).await {
 }
 # }
 ```
+
+## API Coverage
+
+| Endpoint | Method | Status |
+|----------|--------|--------|
+| `/health` | `GET` | `client.health()` |
+| `/auth/check` | `GET` | `client.auth_check()` |
+| `/emails` | `POST` | `client.emails.send()` |
+| `/emails` | `GET` | `client.emails.list()` |
+| `/emails/{requestId}` | `GET` | `client.emails.get()` |
+| `/emails/events` | `GET` | `client.emails.list_events()` |
+| `/emails/scheduled` | `POST` | `client.emails.schedule()` |
+| `/emails/scheduled/{id}` | `GET` | `client.emails.get_scheduled()` |
+| `/emails/scheduled/{id}` | `DELETE` | `client.emails.cancel_scheduled()` |
+| `/domains` | `GET` | `client.domains.list()` |
+| `/domains` | `POST` | `client.domains.create()` |
+| `/domains/{domain}` | `GET` | `client.domains.get()` |
+| `/domains/{domain}` | `DELETE` | `client.domains.delete()` |
+| `/domains/{domain}/verify` | `POST` | `client.domains.verify()` |
+| `/webhooks` | `GET` | `client.webhooks.list()` |
+| `/webhooks` | `POST` | `client.webhooks.create()` |
+| `/webhooks/{id}` | `GET` | `client.webhooks.get()` |
+| `/webhooks/{id}` | `PUT` | `client.webhooks.update()` |
+| `/webhooks/{id}` | `DELETE` | `client.webhooks.delete()` |
+| `/templates` | `GET` | `client.templates.list()` |
+| `/templates` | `POST` | `client.templates.create()` |
+| `/templates/{slug}` | `GET` | `client.templates.get()` |
+| `/templates/{slug}` | `PUT` | `client.templates.update()` |
+| `/templates/{slug}` | `DELETE` | `client.templates.delete()` |
+| `/templates/{slug}/merge-tags` | `GET` | `client.templates.get_merge_tags()` |
+| `/templates/html` | `GET` | `client.templates.get_html()` |
+| `/projects` | `GET` | `client.projects.list()` |
 
 ## License
 

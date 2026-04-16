@@ -109,6 +109,31 @@ impl DomainsSvc {
         self.0.send(request).await?;
         Ok(())
     }
+
+    /// Verify a domain's DNS configuration.
+    ///
+    /// Triggers a DNS lookup to verify DKIM, CNAME, DMARC, and SPF records.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use lettr::Lettr;
+    /// # async fn run() -> lettr::Result<()> {
+    /// let client = Lettr::new("your-api-key");
+    ///
+    /// let result = client.domains.verify("example.com").await?;
+    /// println!("DKIM: {}, CNAME: {}", result.dkim_status, result.cname_status);
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[maybe_async::maybe_async]
+    pub async fn verify(&self, domain: &str) -> crate::Result<VerifyDomainResponse> {
+        let path = format!("/domains/{domain}/verify");
+        let request = self.0.build(Method::POST, &path);
+        let response = self.0.send(request).await?;
+        let wrapper = response.json::<VerifyDomainResponseWrapper>().await?;
+        Ok(wrapper.data)
+    }
 }
 
 // ── Request Types ──────────────────────────────────────────────────────────
@@ -137,7 +162,7 @@ struct ListDomainsData {
 pub struct Domain {
     /// Domain name.
     pub domain: String,
-    /// Status identifier (e.g. "approved", "pending").
+    /// Status identifier (e.g. "approved", "pending", "blocked").
     pub status: String,
     /// Human-readable status label.
     pub status_label: String,
@@ -182,6 +207,9 @@ pub struct DkimInfo {
     pub selector: String,
     /// DKIM headers configuration.
     pub headers: String,
+    /// Domain used for DKIM signing.
+    #[serde(default)]
+    pub signing_domain: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -206,10 +234,22 @@ pub struct DomainDetail {
     pub cname_status: Option<String>,
     /// DKIM record verification status.
     pub dkim_status: Option<String>,
+    /// DMARC verification status.
+    #[serde(default)]
+    pub dmarc_status: Option<String>,
+    /// SPF verification status.
+    #[serde(default)]
+    pub spf_status: Option<String>,
+    /// Whether this is a primary (apex) sending domain.
+    #[serde(default)]
+    pub is_primary_domain: Option<bool>,
     /// Tracking domain, if configured.
     pub tracking_domain: Option<String>,
     /// DNS records for domain verification.
     pub dns: Option<DnsRecords>,
+    /// Detected DNS provider.
+    #[serde(default)]
+    pub dns_provider: Option<DnsProvider>,
     /// Creation timestamp.
     pub created_at: String,
     /// Last update timestamp.
@@ -230,4 +270,130 @@ pub struct DkimDnsRecord {
     pub selector: String,
     /// DKIM public key.
     pub public: String,
+    /// Headers included in DKIM signature.
+    #[serde(default)]
+    pub headers: Option<String>,
+}
+
+/// Detected DNS provider for a domain.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DnsProvider {
+    /// Machine-readable DNS provider identifier.
+    pub provider: String,
+    /// Human-readable DNS provider name.
+    pub provider_label: String,
+    /// Nameservers detected for the domain.
+    pub nameservers: Vec<String>,
+    /// Error message if DNS provider detection failed.
+    pub error: Option<String>,
+}
+
+// ── Domain Verification Types ──────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct VerifyDomainResponseWrapper {
+    #[allow(dead_code)]
+    message: String,
+    data: VerifyDomainResponse,
+}
+
+/// Response from verifying a domain's DNS configuration.
+#[derive(Debug, Clone, Deserialize)]
+pub struct VerifyDomainResponse {
+    /// The domain name.
+    pub domain: String,
+    /// DKIM verification status.
+    pub dkim_status: String,
+    /// CNAME verification status.
+    pub cname_status: String,
+    /// DMARC verification status.
+    pub dmarc_status: String,
+    /// SPF verification status.
+    pub spf_status: String,
+    /// Whether this is a primary (apex) sending domain.
+    pub is_primary_domain: bool,
+    /// Whether domain ownership has been verified.
+    #[serde(default)]
+    pub ownership_verified: Option<String>,
+    /// DNS verification details.
+    #[serde(default)]
+    pub dns: Option<DomainDnsVerification>,
+    /// DMARC validation result.
+    #[serde(default)]
+    pub dmarc: Option<DmarcValidationResult>,
+    /// SPF validation result.
+    #[serde(default)]
+    pub spf: Option<SpfValidationResult>,
+}
+
+/// DNS verification error details.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DomainDnsVerification {
+    /// Found DKIM record value.
+    #[serde(default)]
+    pub dkim_record: Option<String>,
+    /// Found CNAME record value.
+    #[serde(default)]
+    pub cname_record: Option<String>,
+    /// DKIM verification error message.
+    #[serde(default)]
+    pub dkim_error: Option<String>,
+    /// CNAME verification error message.
+    #[serde(default)]
+    pub cname_error: Option<String>,
+    /// Found DMARC record value.
+    #[serde(default)]
+    pub dmarc_record: Option<String>,
+    /// DMARC verification error message.
+    #[serde(default)]
+    pub dmarc_error: Option<String>,
+    /// Found SPF record value.
+    #[serde(default)]
+    pub spf_record: Option<String>,
+    /// SPF verification error message.
+    #[serde(default)]
+    pub spf_error: Option<String>,
+}
+
+/// DMARC validation result.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DmarcValidationResult {
+    /// Whether a valid DMARC record was found.
+    pub is_valid: bool,
+    /// DMARC validation status.
+    pub status: String,
+    /// Domain where the DMARC record was located.
+    #[serde(default)]
+    pub found_at_domain: Option<String>,
+    /// Raw DMARC record value.
+    #[serde(default)]
+    pub record: Option<String>,
+    /// DMARC policy tag (`p=`).
+    #[serde(default)]
+    pub policy: Option<String>,
+    /// DMARC subdomain policy tag (`sp=`).
+    #[serde(default)]
+    pub subdomain_policy: Option<String>,
+    /// Validation error message.
+    #[serde(default)]
+    pub error: Option<String>,
+    /// Whether covered by parent domain's subdomain policy.
+    pub covered_by_parent_policy: bool,
+}
+
+/// SPF validation result.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SpfValidationResult {
+    /// Whether a valid SPF record was found.
+    pub is_valid: bool,
+    /// SPF validation status.
+    pub status: String,
+    /// Raw SPF record value.
+    #[serde(default)]
+    pub record: Option<String>,
+    /// Validation error message.
+    #[serde(default)]
+    pub error: Option<String>,
+    /// Whether the SPF record authorises SparkPost.
+    pub includes_sparkpost: bool,
 }

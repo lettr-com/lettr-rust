@@ -1,6 +1,6 @@
 [package]
 name = "lettr"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.70"
 
@@ -33,3 +33,5 @@ maybe-async = "0.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+wiremock = "0.6"
+serde_json = "1.0"
