@@ -36,10 +36,10 @@ async fn list_domains() {
 
     assert_eq!(domains.len(), 1);
     assert_eq!(domains[0].domain, "example.com");
-    assert_eq!(domains[0].status, "approved");
+    assert_eq!(domains[0].status, lettr::domains::DomainStatus::Approved);
     assert!(domains[0].can_send);
-    assert_eq!(domains[0].cname_status.as_deref(), Some("valid"));
-    assert_eq!(domains[0].dkim_status.as_deref(), Some("valid"));
+    assert_eq!(domains[0].cname_status, Some(lettr::domains::DnsVerificationStatus::Valid));
+    assert_eq!(domains[0].dkim_status, Some(lettr::domains::DnsVerificationStatus::Valid));
 }
 
 #[tokio::test]
@@ -69,7 +69,7 @@ async fn create_domain() {
     let response = client.domains.create("new.example.com").await.unwrap();
 
     assert_eq!(response.domain, "new.example.com");
-    assert_eq!(response.status, "pending");
+    assert_eq!(response.status, lettr::domains::DomainStatus::Pending);
     let dkim = response.dkim.unwrap();
     assert_eq!(dkim.selector, "scph0123");
     assert_eq!(dkim.signing_domain.as_deref(), Some("new.example.com"));
@@ -118,9 +118,9 @@ async fn get_domain() {
     let domain = client.domains.get("example.com").await.unwrap();
 
     assert_eq!(domain.domain, "example.com");
-    assert_eq!(domain.dmarc_status.as_deref(), Some("valid"));
-    assert_eq!(domain.spf_status.as_deref(), Some("valid"));
-    assert_eq!(domain.is_primary_domain, Some(false));
+    assert_eq!(domain.dmarc_status, Some(lettr::domains::DnsVerificationStatus::Valid));
+    assert_eq!(domain.spf_status, Some(lettr::domains::DnsVerificationStatus::Valid));
+    assert!(!domain.is_primary_domain);
     assert_eq!(domain.tracking_domain.as_deref(), Some("tracking.example.com"));
 
     let dns_provider = domain.dns_provider.unwrap();
@@ -198,10 +198,10 @@ async fn verify_domain() {
     let result = client.domains.verify("example.com").await.unwrap();
 
     assert_eq!(result.domain, "example.com");
-    assert_eq!(result.dkim_status, "valid");
-    assert_eq!(result.cname_status, "valid");
-    assert_eq!(result.dmarc_status, "valid");
-    assert_eq!(result.spf_status, "valid");
+    assert_eq!(result.dkim_status, lettr::domains::DnsVerificationStatus::Valid);
+    assert_eq!(result.cname_status, lettr::domains::DnsVerificationStatus::Valid);
+    assert_eq!(result.dmarc_status, lettr::domains::DnsVerificationStatus::Valid);
+    assert_eq!(result.spf_status, lettr::domains::DnsVerificationStatus::Valid);
     assert!(!result.is_primary_domain);
 
     let dns = result.dns.unwrap();
@@ -210,7 +210,7 @@ async fn verify_domain() {
 
     let dmarc = result.dmarc.unwrap();
     assert!(dmarc.is_valid);
-    assert_eq!(dmarc.policy.as_deref(), Some("none"));
+    assert_eq!(dmarc.policy, Some(lettr::domains::DmarcPolicy::None));
     assert!(!dmarc.covered_by_parent_policy);
 
     let spf = result.spf.unwrap();

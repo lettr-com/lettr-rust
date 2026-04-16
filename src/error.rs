@@ -1,6 +1,48 @@
 use std::collections::HashMap;
 use std::fmt;
 
+/// Machine-readable error code returned by the Lettr API.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ErrorCode {
+    ValidationError,
+    InvalidDomain,
+    UnconfiguredDomain,
+    SendError,
+    TransmissionFailed,
+    ResourceAlreadyExists,
+    TemplateNotFound,
+    NotFound,
+    QuotaExceeded,
+    DailyQuotaExceeded,
+    InsufficientScope,
+    ScheduleCancellationFailed,
+    /// An unknown error code not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ValidationError => write!(f, "validation_error"),
+            Self::InvalidDomain => write!(f, "invalid_domain"),
+            Self::UnconfiguredDomain => write!(f, "unconfigured_domain"),
+            Self::SendError => write!(f, "send_error"),
+            Self::TransmissionFailed => write!(f, "transmission_failed"),
+            Self::ResourceAlreadyExists => write!(f, "resource_already_exists"),
+            Self::TemplateNotFound => write!(f, "template_not_found"),
+            Self::NotFound => write!(f, "not_found"),
+            Self::QuotaExceeded => write!(f, "quota_exceeded"),
+            Self::DailyQuotaExceeded => write!(f, "daily_quota_exceeded"),
+            Self::InsufficientScope => write!(f, "insufficient_scope"),
+            Self::ScheduleCancellationFailed => write!(f, "schedule_cancellation_failed"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
 /// Error type for operations of a [`Lettr`](crate::Lettr) client.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -28,7 +70,7 @@ pub struct ApiError {
     pub message: String,
     /// Machine-readable error code.
     #[serde(default)]
-    pub error_code: Option<String>,
+    pub error_code: Option<ErrorCode>,
 }
 
 impl fmt::Display for ApiError {
@@ -50,7 +92,7 @@ pub struct ValidationError {
     pub message: String,
     /// Machine-readable error code.
     #[serde(default)]
-    pub error_code: Option<String>,
+    pub error_code: Option<ErrorCode>,
     /// Field-level validation errors.
     #[serde(default)]
     pub errors: HashMap<String, Vec<String>>,
@@ -75,7 +117,7 @@ impl std::error::Error for ValidationError {}
 pub(crate) struct RawErrorResponse {
     pub message: String,
     #[serde(default)]
-    pub error_code: Option<String>,
+    pub error_code: Option<ErrorCode>,
     #[serde(default)]
     pub errors: Option<HashMap<String, Vec<String>>>,
 }

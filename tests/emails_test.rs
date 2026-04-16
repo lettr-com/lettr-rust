@@ -124,7 +124,7 @@ async fn list_emails() {
     assert_eq!(response.events.data.len(), 1);
     assert_eq!(response.events.total_count, 1);
     assert_eq!(response.events.data[0].event_id, "evt-001");
-    assert_eq!(response.events.data[0].event_type, "injection");
+    assert_eq!(response.events.data[0].event_type, lettr::emails::EventType::Injection);
     assert_eq!(response.events.data[0].subject.as_deref(), Some("Welcome"));
     assert_eq!(response.events.pagination.per_page, 25);
 }
@@ -180,15 +180,15 @@ async fn get_email_detail() {
     let response = client.emails.get("12345678901234567890", None, None).await.unwrap();
 
     assert_eq!(response.transmission_id, "12345678901234567890");
-    assert_eq!(response.state, "delivered");
+    assert_eq!(response.state, lettr::emails::EmailState::Delivered);
     assert_eq!(response.from, "sender@example.com");
     assert_eq!(response.subject, "Welcome to Lettr");
     assert_eq!(response.recipients.len(), 1);
     assert_eq!(response.num_recipients, 1);
     assert!(response.scheduled_at.is_none());
     assert_eq!(response.events.len(), 2);
-    assert_eq!(response.events[0].event_type, "injection");
-    assert_eq!(response.events[1].event_type, "delivery");
+    assert_eq!(response.events[0].event_type, lettr::emails::EventType::Injection);
+    assert_eq!(response.events[1].event_type, lettr::emails::EventType::Delivery);
     assert_eq!(response.events[1].queue_time, Some(1845));
 }
 
@@ -252,9 +252,9 @@ async fn list_email_events() {
     let response = client.emails.list_events(options).await.unwrap();
     assert_eq!(response.events.data.len(), 2);
     assert_eq!(response.events.total_count, 2);
-    assert_eq!(response.events.data[0].event_type, "delivery");
+    assert_eq!(response.events.data[0].event_type, lettr::emails::EventType::Delivery);
     assert_eq!(response.events.data[0].queue_time, Some(1845));
-    assert_eq!(response.events.data[1].event_type, "bounce");
+    assert_eq!(response.events.data[1].event_type, lettr::emails::EventType::Bounce);
     assert_eq!(response.events.data[1].bounce_class, Some(10));
     assert_eq!(response.events.data[1].error_code.as_deref(), Some("550"));
 }
@@ -317,7 +317,7 @@ async fn get_scheduled_email() {
     let response = client.emails.get_scheduled("12345678901234567890").await.unwrap();
 
     assert_eq!(response.transmission_id, "12345678901234567890");
-    assert_eq!(response.state, "submitted");
+    assert_eq!(response.state, lettr::emails::ScheduledEmailState::Submitted);
     assert_eq!(response.scheduled_at.as_deref(), Some("2024-01-16T10:00:00+00:00"));
     assert_eq!(response.from, "sender@example.com");
     assert_eq!(response.from_name.as_deref(), Some("Sender Name"));
@@ -403,7 +403,7 @@ async fn email_event_with_click_data() {
     let response = client.emails.list_events(options).await.unwrap();
     let event = &response.events.data[0];
 
-    assert_eq!(event.event_type, "click");
+    assert_eq!(event.event_type, lettr::emails::EventType::Click);
     assert_eq!(event.target_link_url.as_deref(), Some("https://example.com/link"));
     assert_eq!(event.target_link_name.as_deref(), Some("Click here"));
     assert_eq!(event.ip_address.as_deref(), Some("104.28.114.11"));

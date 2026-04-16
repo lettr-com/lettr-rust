@@ -42,9 +42,9 @@ async fn list_webhooks() {
     assert_eq!(webhooks[0].id, "webhook-abc123");
     assert_eq!(webhooks[0].name, "Order Notifications");
     assert!(webhooks[0].enabled);
-    assert_eq!(webhooks[0].auth_type, "basic");
+    assert_eq!(webhooks[0].auth_type, lettr::webhooks::WebhookAuthType::Basic);
     assert!(webhooks[0].has_auth_credentials);
-    assert_eq!(webhooks[0].last_status.as_deref(), Some("success"));
+    assert_eq!(webhooks[0].last_status, Some(lettr::webhooks::WebhookStatus::Success));
     assert_eq!(webhooks[0].event_types.as_ref().unwrap().len(), 2);
 }
 
@@ -85,8 +85,8 @@ async fn create_webhook() {
     let options = lettr::webhooks::CreateWebhookOptions::new(
         "Order Notifications",
         "https://example.com/webhook",
-        "basic",
-        "selected",
+        lettr::webhooks::WebhookAuthType::Basic,
+        lettr::webhooks::WebhookEventsMode::Selected,
     )
     .with_events(vec!["message.delivery".into(), "message.bounce".into()])
     .with_basic_auth("user", "secret");
@@ -151,8 +151,8 @@ fn create_webhook_serialization() {
     let options = lettr::webhooks::CreateWebhookOptions::new(
         "Test Webhook",
         "https://example.com/hook",
-        "oauth2",
-        "selected",
+        lettr::webhooks::WebhookAuthType::Oauth2,
+        lettr::webhooks::WebhookEventsMode::Selected,
     )
     .with_events(vec!["delivery".into()])
     .with_oauth2("client-id", "client-secret", "https://auth.example.com/token");

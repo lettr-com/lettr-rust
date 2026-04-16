@@ -213,7 +213,7 @@ client.domains.delete("example.com").await?;
 
 ```rust,no_run
 use lettr::Lettr;
-use lettr::webhooks::{CreateWebhookOptions, UpdateWebhookOptions};
+use lettr::webhooks::{CreateWebhookOptions, UpdateWebhookOptions, WebhookAuthType, WebhookEventsMode};
 
 # async fn run() -> lettr::Result<()> {
 let client = Lettr::new("your-api-key");
@@ -228,8 +228,8 @@ for webhook in &webhooks {
 let options = CreateWebhookOptions::new(
     "Order Notifications",
     "https://example.com/webhook",
-    "basic",
-    "selected",
+    WebhookAuthType::Basic,
+    WebhookEventsMode::Selected,
 )
 .with_events(vec!["message.delivery".into(), "message.bounce".into()])
 .with_basic_auth("user", "secret");

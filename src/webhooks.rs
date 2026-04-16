@@ -5,6 +5,111 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 
+// ── Enum Types ────────────────────────────────────────────────────────────
+
+/// Authentication type for a webhook.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WebhookAuthType {
+    None,
+    Basic,
+    Oauth2,
+    /// An unknown auth type not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl std::fmt::Display for WebhookAuthType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => write!(f, "none"),
+            Self::Basic => write!(f, "basic"),
+            Self::Oauth2 => write!(f, "oauth2"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// Last delivery status of a webhook.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WebhookStatus {
+    Success,
+    Failure,
+    /// An unknown status not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl std::fmt::Display for WebhookStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Success => write!(f, "success"),
+            Self::Failure => write!(f, "failure"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// Mode for selecting which events trigger a webhook.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WebhookEventsMode {
+    All,
+    Selected,
+}
+
+impl std::fmt::Display for WebhookEventsMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::All => write!(f, "all"),
+            Self::Selected => write!(f, "selected"),
+        }
+    }
+}
+
+/// Webhook event type constants.
+///
+/// Use these when creating or updating webhooks with `WebhookEventsMode::Selected`.
+///
+/// Note: The engagement event names use `engagament` (missing an 'e') to match the API spec.
+pub mod event_types {
+    // Message events
+    pub const INJECTION: &str = "message.injection";
+    pub const DELIVERY: &str = "message.delivery";
+    pub const BOUNCE: &str = "message.bounce";
+    pub const DELAY: &str = "message.delay";
+    pub const OUT_OF_BAND: &str = "message.out_of_band";
+    pub const SPAM_COMPLAINT: &str = "message.spam_complaint";
+    pub const POLICY_REJECTION: &str = "message.policy_rejection";
+
+    // Engagement events (note: "engagament" spelling matches the API)
+    pub const CLICK: &str = "engagament.click";
+    pub const OPEN: &str = "engagament.open";
+    pub const INITIAL_OPEN: &str = "engagament.initial_open";
+    pub const AMP_CLICK: &str = "engagament.amp_click";
+    pub const AMP_OPEN: &str = "engagament.amp_open";
+    pub const AMP_INITIAL_OPEN: &str = "engagament.amp_initial_open";
+
+    // Generation events
+    pub const GENERATION_FAILURE: &str = "generation.generation_failure";
+    pub const GENERATION_REJECTION: &str = "generation.generation_rejection";
+
+    // Unsubscribe events
+    pub const LIST_UNSUBSCRIBE: &str = "unsubscribe.list_unsubscribe";
+    pub const LINK_UNSUBSCRIBE: &str = "unsubscribe.link_unsubscribe";
+
+    // Relay events
+    pub const RELAY_INJECTION: &str = "relay.relay_injection";
+    pub const RELAY_REJECTION: &str = "relay.relay_rejection";
+    pub const RELAY_DELIVERY: &str = "relay.relay_delivery";
+    pub const RELAY_TEMPFAIL: &str = "relay.relay_tempfail";
+    pub const RELAY_PERMFAIL: &str = "relay.relay_permfail";
+}
+
 /// Service for the `/webhooks` endpoints.
 #[derive(Clone, Debug)]
 pub struct WebhooksSvc(pub(crate) Arc<Config>);
@@ -63,15 +168,15 @@ impl WebhooksSvc {
     ///
     /// ```rust,no_run
     /// # use lettr::Lettr;
-    /// # use lettr::webhooks::CreateWebhookOptions;
+    /// # use lettr::webhooks::{CreateWebhookOptions, WebhookAuthType, WebhookEventsMode};
     /// # async fn run() -> lettr::Result<()> {
     /// let client = Lettr::new("your-api-key");
     ///
     /// let options = CreateWebhookOptions::new(
     ///     "Order Notifications",
     ///     "https://example.com/webhook",
-    ///     "none",
-    ///     "all",
+    ///     WebhookAuthType::None,
+    ///     WebhookEventsMode::All,
     /// );
     /// let webhook = client.webhooks.create(options).await?;
     /// println!("Webhook created: {}", webhook.id);
@@ -150,10 +255,10 @@ pub struct CreateWebhookOptions {
     name: String,
     /// URL where webhook events will be sent.
     url: String,
-    /// Authentication type ("none", "basic", "oauth2").
-    auth_type: String,
-    /// Whether to receive all events or only selected ones ("all" or "selected").
-    events_mode: String,
+    /// Authentication type.
+    auth_type: WebhookAuthType,
+    /// Whether to receive all events or only selected ones.
+    events_mode: WebhookEventsMode,
     /// List of event types to receive (required when events_mode is "selected").
     #[serde(skip_serializing_if = "Option::is_none")]
     events: Option<Vec<String>>,
@@ -179,14 +284,14 @@ impl CreateWebhookOptions {
     pub fn new(
         name: impl Into<String>,
         url: impl Into<String>,
-        auth_type: impl Into<String>,
-        events_mode: impl Into<String>,
+        auth_type: WebhookAuthType,
+        events_mode: WebhookEventsMode,
     ) -> Self {
         Self {
             name: name.into(),
             url: url.into(),
-            auth_type: auth_type.into(),
-            events_mode: events_mode.into(),
+            auth_type,
+            events_mode,
             events: None,
             auth_username: None,
             auth_password: None,
@@ -240,9 +345,9 @@ pub struct UpdateWebhookOptions {
     /// URL where webhook events will be sent.
     #[serde(skip_serializing_if = "Option::is_none")]
     target: Option<String>,
-    /// Authentication type ("none", "basic", "oauth2").
+    /// Authentication type.
     #[serde(skip_serializing_if = "Option::is_none")]
-    auth_type: Option<String>,
+    auth_type: Option<WebhookAuthType>,
     /// Username for basic authentication.
     #[serde(skip_serializing_if = "Option::is_none")]
     auth_username: Option<String>,
@@ -288,8 +393,8 @@ impl UpdateWebhookOptions {
 
     /// Sets the authentication type.
     #[inline]
-    pub fn with_auth_type(mut self, auth_type: impl Into<String>) -> Self {
-        self.auth_type = Some(auth_type.into());
+    pub fn with_auth_type(mut self, auth_type: WebhookAuthType) -> Self {
+        self.auth_type = Some(auth_type);
         self
     }
 
@@ -368,14 +473,14 @@ pub struct Webhook {
     pub enabled: bool,
     /// Event types this webhook subscribes to.
     pub event_types: Option<Vec<String>>,
-    /// Authentication type (e.g. "basic", "none", "oauth2").
-    pub auth_type: String,
+    /// Authentication type.
+    pub auth_type: WebhookAuthType,
     /// Whether authentication credentials are configured.
     pub has_auth_credentials: bool,
     /// Timestamp of the last successful delivery.
     pub last_successful_at: Option<String>,
     /// Timestamp of the last failed delivery.
     pub last_failure_at: Option<String>,
-    /// Last delivery status (e.g. "success", "failure").
-    pub last_status: Option<String>,
+    /// Last delivery status.
+    pub last_status: Option<WebhookStatus>,
 }

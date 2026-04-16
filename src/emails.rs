@@ -6,6 +6,118 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 
+// ── Enum Types ────────────────────────────────────────────────────────────
+
+/// Delivery state of an email.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum EmailState {
+    Scheduled,
+    Delivered,
+    Bounced,
+    Failed,
+    /// An unknown state not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl std::fmt::Display for EmailState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Scheduled => write!(f, "scheduled"),
+            Self::Delivered => write!(f, "delivered"),
+            Self::Bounced => write!(f, "bounced"),
+            Self::Failed => write!(f, "failed"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// State of a scheduled email transmission.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ScheduledEmailState {
+    Submitted,
+    Generating,
+    Scheduled,
+    Delivered,
+    Bounced,
+    Failed,
+    Unknown,
+    /// A state not yet covered by this enum.
+    #[serde(untagged)]
+    Other(String),
+}
+
+impl std::fmt::Display for ScheduledEmailState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Submitted => write!(f, "submitted"),
+            Self::Generating => write!(f, "generating"),
+            Self::Scheduled => write!(f, "scheduled"),
+            Self::Delivered => write!(f, "delivered"),
+            Self::Bounced => write!(f, "bounced"),
+            Self::Failed => write!(f, "failed"),
+            Self::Unknown => write!(f, "unknown"),
+            Self::Other(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// Type of an email event.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum EventType {
+    Injection,
+    Delivery,
+    Bounce,
+    Delay,
+    OutOfBand,
+    SpamComplaint,
+    PolicyRejection,
+    Click,
+    Open,
+    InitialOpen,
+    AmpClick,
+    AmpOpen,
+    AmpInitialOpen,
+    GenerationFailure,
+    GenerationRejection,
+    ListUnsubscribe,
+    LinkUnsubscribe,
+    /// An unknown event type not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl std::fmt::Display for EventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Injection => write!(f, "injection"),
+            Self::Delivery => write!(f, "delivery"),
+            Self::Bounce => write!(f, "bounce"),
+            Self::Delay => write!(f, "delay"),
+            Self::OutOfBand => write!(f, "out_of_band"),
+            Self::SpamComplaint => write!(f, "spam_complaint"),
+            Self::PolicyRejection => write!(f, "policy_rejection"),
+            Self::Click => write!(f, "click"),
+            Self::Open => write!(f, "open"),
+            Self::InitialOpen => write!(f, "initial_open"),
+            Self::AmpClick => write!(f, "amp_click"),
+            Self::AmpOpen => write!(f, "amp_open"),
+            Self::AmpInitialOpen => write!(f, "amp_initial_open"),
+            Self::GenerationFailure => write!(f, "generation_failure"),
+            Self::GenerationRejection => write!(f, "generation_rejection"),
+            Self::ListUnsubscribe => write!(f, "list_unsubscribe"),
+            Self::LinkUnsubscribe => write!(f, "link_unsubscribe"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
 /// Service for the `/emails` endpoints.
 #[derive(Clone, Debug)]
 pub struct EmailsSvc(pub(crate) Arc<Config>);
@@ -35,6 +147,45 @@ impl EmailsSvc {
         let response = self.0.send(request).await?;
         let wrapper = response.json::<SendEmailResponseWrapper>().await?;
         Ok(wrapper.data)
+    }
+
+    /// Send a transactional email and return quota information.
+    ///
+    /// Same as [`send`](Self::send), but also parses rate-limit headers
+    /// (`X-Monthly-Limit`, `X-Daily-Remaining`, etc.) from the response.
+    /// Quota headers are only present for free-tier teams.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use lettr::{Lettr, CreateEmailOptions};
+    /// # async fn run() -> lettr::Result<()> {
+    /// let client = Lettr::new("your-api-key");
+    ///
+    /// let email = CreateEmailOptions::new("sender@example.com", ["user@example.com"], "Hello!")
+    ///     .with_html("<h1>Welcome!</h1>");
+    ///
+    /// let result = client.emails.send_with_quota(email).await?;
+    /// println!("Request ID: {}", result.response.request_id);
+    /// if let Some(quota) = &result.quota {
+    ///     println!("Monthly remaining: {:?}", quota.monthly_remaining);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[maybe_async::maybe_async]
+    pub async fn send_with_quota(
+        &self,
+        email: CreateEmailOptions,
+    ) -> crate::Result<SendEmailWithQuotaResponse> {
+        let request = self.0.build(Method::POST, "/emails").json(&email);
+        let response = self.0.send(request).await?;
+        let quota = QuotaInfo::from_headers(response.headers());
+        let wrapper = response.json::<SendEmailResponseWrapper>().await?;
+        Ok(SendEmailWithQuotaResponse {
+            response: wrapper.data,
+            quota,
+        })
     }
 
     /// Retrieve a list of sent emails with optional filtering and pagination.
@@ -133,7 +284,7 @@ impl EmailsSvc {
     /// let response = client.emails.list_events(options).await?;
     ///
     /// for event in &response.events.data {
-    ///     println!("{}: {}", event.event_type, event.timestamp);
+    ///     println!("{}: {}", &event.event_type, event.timestamp);
     /// }
     /// # Ok(())
     /// # }
@@ -146,14 +297,12 @@ impl EmailsSvc {
         let mut request = self.0.build(Method::GET, "/emails/events");
 
         if let Some(ref events) = options.events {
-            for event in events {
-                request = request.query(&[("events[]", event.as_str())]);
-            }
+            let joined = events.join(",");
+            request = request.query(&[("events", &joined)]);
         }
         if let Some(ref recipients) = options.recipients {
-            for recipient in recipients {
-                request = request.query(&[("recipients[]", recipient.as_str())]);
-            }
+            let joined = recipients.join(",");
+            request = request.query(&[("recipients", &joined)]);
         }
         if let Some(ref from) = options.from {
             request = request.query(&[("from", from.as_str())]);
@@ -207,6 +356,46 @@ impl EmailsSvc {
         let response = self.0.send(request).await?;
         let wrapper = response.json::<SendEmailResponseWrapper>().await?;
         Ok(wrapper.data)
+    }
+
+    /// Schedule an email and return quota information.
+    ///
+    /// Same as [`schedule`](Self::schedule), but also parses rate-limit headers.
+    /// Quota headers are only present for free-tier teams.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use lettr::Lettr;
+    /// # use lettr::emails::{CreateEmailOptions, ScheduleEmailOptions};
+    /// # async fn run() -> lettr::Result<()> {
+    /// let client = Lettr::new("your-api-key");
+    ///
+    /// let email = CreateEmailOptions::new("sender@example.com", ["user@example.com"], "Hello!")
+    ///     .with_html("<h1>Scheduled!</h1>");
+    ///
+    /// let options = ScheduleEmailOptions::new(email, "2024-01-16T10:00:00Z");
+    /// let result = client.emails.schedule_with_quota(options).await?;
+    /// println!("Request ID: {}", result.response.request_id);
+    /// if let Some(quota) = &result.quota {
+    ///     println!("Daily remaining: {:?}", quota.daily_remaining);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[maybe_async::maybe_async]
+    pub async fn schedule_with_quota(
+        &self,
+        options: ScheduleEmailOptions,
+    ) -> crate::Result<SendEmailWithQuotaResponse> {
+        let request = self.0.build(Method::POST, "/emails/scheduled").json(&options);
+        let response = self.0.send(request).await?;
+        let quota = QuotaInfo::from_headers(response.headers());
+        let wrapper = response.json::<SendEmailResponseWrapper>().await?;
+        Ok(SendEmailWithQuotaResponse {
+            response: wrapper.data,
+            quota,
+        })
     }
 
     /// Retrieve details of a scheduled email.
@@ -339,7 +528,7 @@ pub struct CreateEmailOptions {
 
     /// Substitution data for template personalization.
     #[serde(skip_serializing_if = "Option::is_none")]
-    substitution_data: Option<HashMap<String, serde_json::Value>>,
+    substitution_data: Option<HashMap<String, String>>,
 
     /// Tracking and delivery options.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -538,7 +727,7 @@ impl CreateEmailOptions {
     pub fn with_substitution(
         mut self,
         key: impl Into<String>,
-        value: impl Into<serde_json::Value>,
+        value: impl Into<String>,
     ) -> Self {
         self.substitution_data
             .get_or_insert_with(HashMap::new)
@@ -548,7 +737,7 @@ impl CreateEmailOptions {
 
     /// Sets all substitution data at once.
     #[inline]
-    pub fn with_substitution_data(mut self, data: HashMap<String, serde_json::Value>) -> Self {
+    pub fn with_substitution_data(mut self, data: HashMap<String, String>) -> Self {
         self.substitution_data = Some(data);
         self
     }
@@ -880,6 +1069,69 @@ pub struct SendEmailResponse {
     pub rejected: u32,
 }
 
+/// Successful response from sending an email, including quota information.
+///
+/// Quota headers are only present for free-tier teams.
+#[derive(Debug, Clone)]
+pub struct SendEmailWithQuotaResponse {
+    /// The email send response data.
+    pub response: SendEmailResponse,
+    /// Rate-limit / quota information (only present for free-tier teams).
+    pub quota: Option<QuotaInfo>,
+}
+
+/// Rate-limit and quota information returned in response headers.
+///
+/// These headers are only present for free-tier teams.
+#[derive(Debug, Clone)]
+pub struct QuotaInfo {
+    /// Total monthly email limit.
+    pub monthly_limit: Option<u64>,
+    /// Remaining emails allowed this month.
+    pub monthly_remaining: Option<u64>,
+    /// Unix timestamp when the monthly quota resets.
+    pub monthly_reset: Option<u64>,
+    /// Total daily email limit.
+    pub daily_limit: Option<u64>,
+    /// Remaining emails allowed today.
+    pub daily_remaining: Option<u64>,
+    /// Unix timestamp when the daily quota resets.
+    pub daily_reset: Option<u64>,
+}
+
+impl QuotaInfo {
+    fn from_headers(headers: &reqwest::header::HeaderMap) -> Option<Self> {
+        let get = |name: &str| -> Option<u64> {
+            headers
+                .get(name)?
+                .to_str()
+                .ok()?
+                .parse()
+                .ok()
+        };
+
+        let info = Self {
+            monthly_limit: get("X-Monthly-Limit"),
+            monthly_remaining: get("X-Monthly-Remaining"),
+            monthly_reset: get("X-Monthly-Reset"),
+            daily_limit: get("X-Daily-Limit"),
+            daily_remaining: get("X-Daily-Remaining"),
+            daily_reset: get("X-Daily-Reset"),
+        };
+
+        // Only return Some if at least one header was present.
+        if info.monthly_limit.is_some()
+            || info.monthly_remaining.is_some()
+            || info.daily_limit.is_some()
+            || info.daily_remaining.is_some()
+        {
+            Some(info)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct ListEmailsResponseWrapper {
     #[allow(dead_code)]
@@ -914,9 +1166,9 @@ pub struct SentEmailEventsData {
 pub struct SentEmailListItem {
     /// Unique event ID.
     pub event_id: String,
-    /// Event type (e.g. "injection").
+    /// Event type.
     #[serde(rename = "type")]
-    pub event_type: String,
+    pub event_type: EventType,
     /// Timestamp of the event.
     pub timestamp: String,
     /// Transmission request ID.
@@ -993,8 +1245,8 @@ struct GetEmailResponseWrapper {
 pub struct GetEmailResponse {
     /// Unique transmission ID.
     pub transmission_id: String,
-    /// Derived delivery state (e.g. "scheduled", "delivered", "bounced", "failed").
-    pub state: String,
+    /// Derived delivery state.
+    pub state: EmailState,
     /// Sender email address.
     pub from: String,
     /// Sender display name.
@@ -1051,9 +1303,9 @@ pub struct EmailEvent {
     // ── Common required fields ──
     /// Unique event ID.
     pub event_id: String,
-    /// Event type (e.g. "injection", "delivery", "bounce", "click", "open").
+    /// Event type.
     #[serde(rename = "type")]
-    pub event_type: String,
+    pub event_type: EventType,
     /// Timestamp of the event (ISO 8601).
     pub timestamp: String,
 
@@ -1290,7 +1542,7 @@ pub struct ScheduledTransmission {
     /// Unique transmission ID.
     pub transmission_id: String,
     /// Current state of the transmission.
-    pub state: String,
+    pub state: ScheduledEmailState,
     /// Scheduled delivery time (ISO 8601).
     #[serde(default)]
     pub scheduled_at: Option<String>,

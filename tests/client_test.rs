@@ -77,7 +77,7 @@ async fn api_error_handling() {
     match err {
         lettr::Error::Api(api_err) => {
             assert_eq!(api_err.message, "The sender domain could not be determined.");
-            assert_eq!(api_err.error_code.as_deref(), Some("invalid_domain"));
+            assert_eq!(api_err.error_code, Some(lettr::error::ErrorCode::InvalidDomain));
         }
         other => panic!("Expected Api error, got: {other:?}"),
     }

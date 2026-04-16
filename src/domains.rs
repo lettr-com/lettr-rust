@@ -5,6 +5,84 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 
+// ── Enum Types ────────────────────────────────────────────────────────────
+
+/// Status of a sending domain.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DomainStatus {
+    Pending,
+    Approved,
+    Blocked,
+    /// An unknown status not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl std::fmt::Display for DomainStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pending => write!(f, "pending"),
+            Self::Approved => write!(f, "approved"),
+            Self::Blocked => write!(f, "blocked"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// DNS verification status for DKIM, CNAME, DMARC, SPF records.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DnsVerificationStatus {
+    Valid,
+    Invalid,
+    Missing,
+    Unverified,
+    NotApplicable,
+    /// An unknown status not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl std::fmt::Display for DnsVerificationStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Valid => write!(f, "valid"),
+            Self::Invalid => write!(f, "invalid"),
+            Self::Missing => write!(f, "missing"),
+            Self::Unverified => write!(f, "unverified"),
+            Self::NotApplicable => write!(f, "not_applicable"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// DMARC policy value.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DmarcPolicy {
+    None,
+    Quarantine,
+    Reject,
+    /// An unknown policy not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl std::fmt::Display for DmarcPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => write!(f, "none"),
+            Self::Quarantine => write!(f, "quarantine"),
+            Self::Reject => write!(f, "reject"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
 /// Service for the `/domains` endpoints.
 #[derive(Clone, Debug)]
 pub struct DomainsSvc(pub(crate) Arc<Config>);
@@ -162,16 +240,16 @@ struct ListDomainsData {
 pub struct Domain {
     /// Domain name.
     pub domain: String,
-    /// Status identifier (e.g. "approved", "pending", "blocked").
-    pub status: String,
+    /// Domain status.
+    pub status: DomainStatus,
     /// Human-readable status label.
     pub status_label: String,
     /// Whether this domain can currently send emails.
     pub can_send: bool,
     /// CNAME record verification status.
-    pub cname_status: Option<String>,
+    pub cname_status: Option<DnsVerificationStatus>,
     /// DKIM record verification status.
-    pub dkim_status: Option<String>,
+    pub dkim_status: Option<DnsVerificationStatus>,
     /// Creation timestamp.
     pub created_at: String,
     /// Last update timestamp.
@@ -190,8 +268,8 @@ struct CreateDomainResponseWrapper {
 pub struct CreateDomainResponse {
     /// Domain name.
     pub domain: String,
-    /// Initial status (usually "pending").
-    pub status: String,
+    /// Initial domain status.
+    pub status: DomainStatus,
     /// Human-readable status label.
     pub status_label: String,
     /// DKIM configuration.
@@ -224,25 +302,25 @@ struct ShowDomainResponseWrapper {
 pub struct DomainDetail {
     /// Domain name.
     pub domain: String,
-    /// Status identifier.
-    pub status: String,
+    /// Domain status.
+    pub status: DomainStatus,
     /// Human-readable status label.
     pub status_label: String,
     /// Whether this domain can currently send emails.
     pub can_send: bool,
     /// CNAME record verification status.
-    pub cname_status: Option<String>,
+    pub cname_status: Option<DnsVerificationStatus>,
     /// DKIM record verification status.
-    pub dkim_status: Option<String>,
+    pub dkim_status: Option<DnsVerificationStatus>,
     /// DMARC verification status.
     #[serde(default)]
-    pub dmarc_status: Option<String>,
+    pub dmarc_status: Option<DnsVerificationStatus>,
     /// SPF verification status.
     #[serde(default)]
-    pub spf_status: Option<String>,
+    pub spf_status: Option<DnsVerificationStatus>,
     /// Whether this is a primary (apex) sending domain.
     #[serde(default)]
-    pub is_primary_domain: Option<bool>,
+    pub is_primary_domain: bool,
     /// Tracking domain, if configured.
     pub tracking_domain: Option<String>,
     /// DNS records for domain verification.
@@ -303,13 +381,13 @@ pub struct VerifyDomainResponse {
     /// The domain name.
     pub domain: String,
     /// DKIM verification status.
-    pub dkim_status: String,
+    pub dkim_status: DnsVerificationStatus,
     /// CNAME verification status.
-    pub cname_status: String,
+    pub cname_status: DnsVerificationStatus,
     /// DMARC verification status.
-    pub dmarc_status: String,
+    pub dmarc_status: DnsVerificationStatus,
     /// SPF verification status.
-    pub spf_status: String,
+    pub spf_status: DnsVerificationStatus,
     /// Whether this is a primary (apex) sending domain.
     pub is_primary_domain: bool,
     /// Whether domain ownership has been verified.
@@ -361,7 +439,7 @@ pub struct DmarcValidationResult {
     /// Whether a valid DMARC record was found.
     pub is_valid: bool,
     /// DMARC validation status.
-    pub status: String,
+    pub status: DnsVerificationStatus,
     /// Domain where the DMARC record was located.
     #[serde(default)]
     pub found_at_domain: Option<String>,
@@ -370,10 +448,10 @@ pub struct DmarcValidationResult {
     pub record: Option<String>,
     /// DMARC policy tag (`p=`).
     #[serde(default)]
-    pub policy: Option<String>,
+    pub policy: Option<DmarcPolicy>,
     /// DMARC subdomain policy tag (`sp=`).
     #[serde(default)]
-    pub subdomain_policy: Option<String>,
+    pub subdomain_policy: Option<DmarcPolicy>,
     /// Validation error message.
     #[serde(default)]
     pub error: Option<String>,
@@ -387,7 +465,7 @@ pub struct SpfValidationResult {
     /// Whether a valid SPF record was found.
     pub is_valid: bool,
     /// SPF validation status.
-    pub status: String,
+    pub status: DnsVerificationStatus,
     /// Raw SPF record value.
     #[serde(default)]
     pub record: Option<String>,
