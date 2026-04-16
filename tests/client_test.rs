@@ -66,18 +66,20 @@ async fn api_error_handling() {
         .await;
 
     let client = client(&server);
-    let email = lettr::CreateEmailOptions::new(
-        "bad@example.com",
-        ["user@example.com"],
-        "Test",
-    )
-    .with_html("<p>Test</p>");
+    let email = lettr::CreateEmailOptions::new("bad@example.com", ["user@example.com"], "Test")
+        .with_html("<p>Test</p>");
 
     let err = client.emails.send(email).await.unwrap_err();
     match err {
         lettr::Error::Api(api_err) => {
-            assert_eq!(api_err.message, "The sender domain could not be determined.");
-            assert_eq!(api_err.error_code, Some(lettr::error::ErrorCode::InvalidDomain));
+            assert_eq!(
+                api_err.message,
+                "The sender domain could not be determined."
+            );
+            assert_eq!(
+                api_err.error_code,
+                Some(lettr::error::ErrorCode::InvalidDomain)
+            );
         }
         other => panic!("Expected Api error, got: {other:?}"),
     }
@@ -101,12 +103,8 @@ async fn validation_error_handling() {
         .await;
 
     let client = client(&server);
-    let email = lettr::CreateEmailOptions::new(
-        "sender@example.com",
-        ["user@example.com"],
-        "Test",
-    )
-    .with_html("<p>Test</p>");
+    let email = lettr::CreateEmailOptions::new("sender@example.com", ["user@example.com"], "Test")
+        .with_html("<p>Test</p>");
 
     let err = client.emails.send(email).await.unwrap_err();
     match err {

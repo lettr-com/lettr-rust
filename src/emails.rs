@@ -352,7 +352,10 @@ impl EmailsSvc {
         &self,
         options: ScheduleEmailOptions,
     ) -> crate::Result<SendEmailResponse> {
-        let request = self.0.build(Method::POST, "/emails/scheduled").json(&options);
+        let request = self
+            .0
+            .build(Method::POST, "/emails/scheduled")
+            .json(&options);
         let response = self.0.send(request).await?;
         let wrapper = response.json::<SendEmailResponseWrapper>().await?;
         Ok(wrapper.data)
@@ -388,7 +391,10 @@ impl EmailsSvc {
         &self,
         options: ScheduleEmailOptions,
     ) -> crate::Result<SendEmailWithQuotaResponse> {
-        let request = self.0.build(Method::POST, "/emails/scheduled").json(&options);
+        let request = self
+            .0
+            .build(Method::POST, "/emails/scheduled")
+            .json(&options);
         let response = self.0.send(request).await?;
         let quota = QuotaInfo::from_headers(response.headers());
         let wrapper = response.json::<SendEmailResponseWrapper>().await?;
@@ -724,11 +730,7 @@ impl CreateEmailOptions {
 
     /// Adds a substitution data key-value pair for template personalization.
     #[inline]
-    pub fn with_substitution(
-        mut self,
-        key: impl Into<String>,
-        value: impl Into<String>,
-    ) -> Self {
+    pub fn with_substitution(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.substitution_data
             .get_or_insert_with(HashMap::new)
             .insert(key.into(), value.into());
@@ -744,11 +746,7 @@ impl CreateEmailOptions {
 
     /// Adds a metadata key-value pair.
     #[inline]
-    pub fn with_metadata_entry(
-        mut self,
-        key: impl Into<String>,
-        value: impl Into<String>,
-    ) -> Self {
+    pub fn with_metadata_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata
             .get_or_insert_with(HashMap::new)
             .insert(key.into(), value.into());
@@ -1101,14 +1099,7 @@ pub struct QuotaInfo {
 
 impl QuotaInfo {
     fn from_headers(headers: &reqwest::header::HeaderMap) -> Option<Self> {
-        let get = |name: &str| -> Option<u64> {
-            headers
-                .get(name)?
-                .to_str()
-                .ok()?
-                .parse()
-                .ok()
-        };
+        let get = |name: &str| -> Option<u64> { headers.get(name)?.to_str().ok()?.parse().ok() };
 
         let info = Self {
             monthly_limit: get("X-Monthly-Limit"),

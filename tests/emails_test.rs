@@ -23,25 +23,22 @@ async fn send_email() {
         .await;
 
     let client = client(&server);
-    let email = lettr::CreateEmailOptions::new(
-        "sender@example.com",
-        ["user@example.com"],
-        "Hello!",
-    )
-    .with_html("<h1>Welcome!</h1>")
-    .with_text("Welcome!")
-    .with_from_name("Sender Name")
-    .with_cc("cc@example.com")
-    .with_bcc("bcc@example.com")
-    .with_reply_to("reply@example.com")
-    .with_reply_to_name("Reply Name")
-    .with_tag("welcome-series")
-    .with_header("X-Custom-ID", "abc-123")
-    .with_click_tracking(true)
-    .with_open_tracking(true)
-    .with_transactional(true)
-    .with_inline_css(true)
-    .with_perform_substitutions(true);
+    let email =
+        lettr::CreateEmailOptions::new("sender@example.com", ["user@example.com"], "Hello!")
+            .with_html("<h1>Welcome!</h1>")
+            .with_text("Welcome!")
+            .with_from_name("Sender Name")
+            .with_cc("cc@example.com")
+            .with_bcc("bcc@example.com")
+            .with_reply_to("reply@example.com")
+            .with_reply_to_name("Reply Name")
+            .with_tag("welcome-series")
+            .with_header("X-Custom-ID", "abc-123")
+            .with_click_tracking(true)
+            .with_open_tracking(true)
+            .with_transactional(true)
+            .with_inline_css(true)
+            .with_perform_substitutions(true);
 
     let response = client.emails.send(email).await.unwrap();
     assert_eq!(response.request_id, "12345678901234567890");
@@ -124,7 +121,10 @@ async fn list_emails() {
     assert_eq!(response.events.data.len(), 1);
     assert_eq!(response.events.total_count, 1);
     assert_eq!(response.events.data[0].event_id, "evt-001");
-    assert_eq!(response.events.data[0].event_type, lettr::emails::EventType::Injection);
+    assert_eq!(
+        response.events.data[0].event_type,
+        lettr::emails::EventType::Injection
+    );
     assert_eq!(response.events.data[0].subject.as_deref(), Some("Welcome"));
     assert_eq!(response.events.pagination.per_page, 25);
 }
@@ -177,7 +177,11 @@ async fn get_email_detail() {
         .await;
 
     let client = client(&server);
-    let response = client.emails.get("12345678901234567890", None, None).await.unwrap();
+    let response = client
+        .emails
+        .get("12345678901234567890", None, None)
+        .await
+        .unwrap();
 
     assert_eq!(response.transmission_id, "12345678901234567890");
     assert_eq!(response.state, lettr::emails::EmailState::Delivered);
@@ -187,8 +191,14 @@ async fn get_email_detail() {
     assert_eq!(response.num_recipients, 1);
     assert!(response.scheduled_at.is_none());
     assert_eq!(response.events.len(), 2);
-    assert_eq!(response.events[0].event_type, lettr::emails::EventType::Injection);
-    assert_eq!(response.events[1].event_type, lettr::emails::EventType::Delivery);
+    assert_eq!(
+        response.events[0].event_type,
+        lettr::emails::EventType::Injection
+    );
+    assert_eq!(
+        response.events[1].event_type,
+        lettr::emails::EventType::Delivery
+    );
     assert_eq!(response.events[1].queue_time, Some(1845));
 }
 
@@ -252,9 +262,15 @@ async fn list_email_events() {
     let response = client.emails.list_events(options).await.unwrap();
     assert_eq!(response.events.data.len(), 2);
     assert_eq!(response.events.total_count, 2);
-    assert_eq!(response.events.data[0].event_type, lettr::emails::EventType::Delivery);
+    assert_eq!(
+        response.events.data[0].event_type,
+        lettr::emails::EventType::Delivery
+    );
     assert_eq!(response.events.data[0].queue_time, Some(1845));
-    assert_eq!(response.events.data[1].event_type, lettr::emails::EventType::Bounce);
+    assert_eq!(
+        response.events.data[1].event_type,
+        lettr::emails::EventType::Bounce
+    );
     assert_eq!(response.events.data[1].bounce_class, Some(10));
     assert_eq!(response.events.data[1].error_code.as_deref(), Some("550"));
 }
@@ -277,12 +293,9 @@ async fn schedule_email() {
         .await;
 
     let client = client(&server);
-    let email = lettr::CreateEmailOptions::new(
-        "sender@example.com",
-        ["user@example.com"],
-        "Scheduled!",
-    )
-    .with_html("<h1>Scheduled!</h1>");
+    let email =
+        lettr::CreateEmailOptions::new("sender@example.com", ["user@example.com"], "Scheduled!")
+            .with_html("<h1>Scheduled!</h1>");
 
     let options = lettr::emails::ScheduleEmailOptions::new(email, "2024-01-16T10:00:00Z");
     let response = client.emails.schedule(options).await.unwrap();
@@ -314,11 +327,21 @@ async fn get_scheduled_email() {
         .await;
 
     let client = client(&server);
-    let response = client.emails.get_scheduled("12345678901234567890").await.unwrap();
+    let response = client
+        .emails
+        .get_scheduled("12345678901234567890")
+        .await
+        .unwrap();
 
     assert_eq!(response.transmission_id, "12345678901234567890");
-    assert_eq!(response.state, lettr::emails::ScheduledEmailState::Submitted);
-    assert_eq!(response.scheduled_at.as_deref(), Some("2024-01-16T10:00:00+00:00"));
+    assert_eq!(
+        response.state,
+        lettr::emails::ScheduledEmailState::Submitted
+    );
+    assert_eq!(
+        response.scheduled_at.as_deref(),
+        Some("2024-01-16T10:00:00+00:00")
+    );
     assert_eq!(response.from, "sender@example.com");
     assert_eq!(response.from_name.as_deref(), Some("Sender Name"));
     assert_eq!(response.subject, "Scheduled Newsletter");
@@ -336,7 +359,11 @@ async fn cancel_scheduled_email() {
         .await;
 
     let client = client(&server);
-    client.emails.cancel_scheduled("12345678901234567890").await.unwrap();
+    client
+        .emails
+        .cancel_scheduled("12345678901234567890")
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -397,14 +424,16 @@ async fn email_event_with_click_data() {
         .await;
 
     let client = client(&server);
-    let options = lettr::emails::ListEmailEventsOptions::new()
-        .events(vec!["click".into()]);
+    let options = lettr::emails::ListEmailEventsOptions::new().events(vec!["click".into()]);
 
     let response = client.emails.list_events(options).await.unwrap();
     let event = &response.events.data[0];
 
     assert_eq!(event.event_type, lettr::emails::EventType::Click);
-    assert_eq!(event.target_link_url.as_deref(), Some("https://example.com/link"));
+    assert_eq!(
+        event.target_link_url.as_deref(),
+        Some("https://example.com/link")
+    );
     assert_eq!(event.target_link_name.as_deref(), Some("Click here"));
     assert_eq!(event.ip_address.as_deref(), Some("104.28.114.11"));
 
@@ -421,24 +450,25 @@ async fn email_event_with_click_data() {
 
 #[test]
 fn create_email_options_serialization() {
-    let email = lettr::CreateEmailOptions::new(
-        "sender@example.com",
-        ["user@example.com"],
-        "Test Subject",
-    )
-    .with_html("<p>Hello</p>")
-    .with_cc("cc@example.com")
-    .with_bcc("bcc@example.com")
-    .with_reply_to("reply@example.com")
-    .with_reply_to_name("Reply Name")
-    .with_amp_html("<html amp4email>")
-    .with_tag("tag-1")
-    .with_header("X-Custom", "value")
-    .with_metadata_entry("user_id", "123")
-    .with_substitution("name", "John")
-    .with_attachment(lettr::Attachment::new("file.pdf", "application/pdf", "base64=="))
-    .with_inline_css(true)
-    .with_perform_substitutions(true);
+    let email =
+        lettr::CreateEmailOptions::new("sender@example.com", ["user@example.com"], "Test Subject")
+            .with_html("<p>Hello</p>")
+            .with_cc("cc@example.com")
+            .with_bcc("bcc@example.com")
+            .with_reply_to("reply@example.com")
+            .with_reply_to_name("Reply Name")
+            .with_amp_html("<html amp4email>")
+            .with_tag("tag-1")
+            .with_header("X-Custom", "value")
+            .with_metadata_entry("user_id", "123")
+            .with_substitution("name", "John")
+            .with_attachment(lettr::Attachment::new(
+                "file.pdf",
+                "application/pdf",
+                "base64==",
+            ))
+            .with_inline_css(true)
+            .with_perform_substitutions(true);
 
     let json = serde_json::to_value(&email).unwrap();
 
@@ -478,12 +508,9 @@ fn template_email_serialization() {
 
 #[test]
 fn schedule_email_serialization() {
-    let email = lettr::CreateEmailOptions::new(
-        "sender@example.com",
-        ["user@example.com"],
-        "Scheduled",
-    )
-    .with_html("<p>Later</p>");
+    let email =
+        lettr::CreateEmailOptions::new("sender@example.com", ["user@example.com"], "Scheduled")
+            .with_html("<p>Later</p>");
 
     let schedule = lettr::emails::ScheduleEmailOptions::new(email, "2024-01-16T10:00:00Z");
     let json = serde_json::to_value(&schedule).unwrap();

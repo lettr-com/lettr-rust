@@ -35,8 +35,8 @@ pub mod types {
         Attachment, CreateEmailOptions, EmailEvent, EmailEventsData, EmailOptions, EmailState,
         EventType, GeoIp, GetEmailResponse, ListEmailEventsOptions, ListEmailEventsResponse,
         ListEmailsOptions, ListEmailsResponse, Pagination, QuotaInfo, ScheduleEmailOptions,
-        ScheduledEmailState, ScheduledTransmission, SendEmailResponse,
-        SendEmailWithQuotaResponse, SentEmailEventsData, SentEmailListItem, UserAgentParsed,
+        ScheduledEmailState, ScheduledTransmission, SendEmailResponse, SendEmailWithQuotaResponse,
+        SentEmailEventsData, SentEmailListItem, UserAgentParsed,
     };
 
     // Domains

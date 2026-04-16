@@ -160,7 +160,11 @@ async fn update_template() {
         .with_name("Updated Welcome Email")
         .with_html("<h1>Hello {{name}}!</h1>");
 
-    let result = client.templates.update("welcome-email", options).await.unwrap();
+    let result = client
+        .templates
+        .update("welcome-email", options)
+        .await
+        .unwrap();
     assert_eq!(result.name, "Updated Welcome Email");
     assert_eq!(result.active_version, 2);
     assert_eq!(result.merge_tags[0].key, "name");
@@ -180,7 +184,11 @@ async fn delete_template() {
         .await;
 
     let client = client(&server);
-    client.templates.delete("welcome-email", None).await.unwrap();
+    client
+        .templates
+        .delete("welcome-email", None)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -222,7 +230,11 @@ async fn get_merge_tags() {
         .await;
 
     let client = client(&server);
-    let result = client.templates.get_merge_tags("welcome-email", None, None).await.unwrap();
+    let result = client
+        .templates
+        .get_merge_tags("welcome-email", None, None)
+        .await
+        .unwrap();
 
     assert_eq!(result.project_id, 13);
     assert_eq!(result.template_slug, "welcome-email");

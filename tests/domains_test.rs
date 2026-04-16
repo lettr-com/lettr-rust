@@ -38,8 +38,14 @@ async fn list_domains() {
     assert_eq!(domains[0].domain, "example.com");
     assert_eq!(domains[0].status, lettr::domains::DomainStatus::Approved);
     assert!(domains[0].can_send);
-    assert_eq!(domains[0].cname_status, Some(lettr::domains::DnsVerificationStatus::Valid));
-    assert_eq!(domains[0].dkim_status, Some(lettr::domains::DnsVerificationStatus::Valid));
+    assert_eq!(
+        domains[0].cname_status,
+        Some(lettr::domains::DnsVerificationStatus::Valid)
+    );
+    assert_eq!(
+        domains[0].dkim_status,
+        Some(lettr::domains::DnsVerificationStatus::Valid)
+    );
 }
 
 #[tokio::test]
@@ -118,10 +124,19 @@ async fn get_domain() {
     let domain = client.domains.get("example.com").await.unwrap();
 
     assert_eq!(domain.domain, "example.com");
-    assert_eq!(domain.dmarc_status, Some(lettr::domains::DnsVerificationStatus::Valid));
-    assert_eq!(domain.spf_status, Some(lettr::domains::DnsVerificationStatus::Valid));
+    assert_eq!(
+        domain.dmarc_status,
+        Some(lettr::domains::DnsVerificationStatus::Valid)
+    );
+    assert_eq!(
+        domain.spf_status,
+        Some(lettr::domains::DnsVerificationStatus::Valid)
+    );
     assert!(!domain.is_primary_domain);
-    assert_eq!(domain.tracking_domain.as_deref(), Some("tracking.example.com"));
+    assert_eq!(
+        domain.tracking_domain.as_deref(),
+        Some("tracking.example.com")
+    );
 
     let dns_provider = domain.dns_provider.unwrap();
     assert_eq!(dns_provider.provider, "cloudflare");
@@ -198,10 +213,22 @@ async fn verify_domain() {
     let result = client.domains.verify("example.com").await.unwrap();
 
     assert_eq!(result.domain, "example.com");
-    assert_eq!(result.dkim_status, lettr::domains::DnsVerificationStatus::Valid);
-    assert_eq!(result.cname_status, lettr::domains::DnsVerificationStatus::Valid);
-    assert_eq!(result.dmarc_status, lettr::domains::DnsVerificationStatus::Valid);
-    assert_eq!(result.spf_status, lettr::domains::DnsVerificationStatus::Valid);
+    assert_eq!(
+        result.dkim_status,
+        lettr::domains::DnsVerificationStatus::Valid
+    );
+    assert_eq!(
+        result.cname_status,
+        lettr::domains::DnsVerificationStatus::Valid
+    );
+    assert_eq!(
+        result.dmarc_status,
+        lettr::domains::DnsVerificationStatus::Valid
+    );
+    assert_eq!(
+        result.spf_status,
+        lettr::domains::DnsVerificationStatus::Valid
+    );
     assert!(!result.is_primary_domain);
 
     let dns = result.dns.unwrap();

@@ -100,11 +100,7 @@ impl TemplatesSvc {
     /// # }
     /// ```
     #[maybe_async::maybe_async]
-    pub async fn get(
-        &self,
-        slug: &str,
-        project_id: Option<u64>,
-    ) -> crate::Result<TemplateDetail> {
+    pub async fn get(&self, slug: &str, project_id: Option<u64>) -> crate::Result<TemplateDetail> {
         let path = format!("/templates/{slug}");
         let mut request = self.0.build(Method::GET, &path);
 

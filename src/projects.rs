@@ -30,10 +30,7 @@ impl ProjectsSvc {
     /// # }
     /// ```
     #[maybe_async::maybe_async]
-    pub async fn list(
-        &self,
-        options: ListProjectsOptions,
-    ) -> crate::Result<ListProjectsResponse> {
+    pub async fn list(&self, options: ListProjectsOptions) -> crate::Result<ListProjectsResponse> {
         let mut request = self.0.build(Method::GET, "/projects");
 
         if let Some(per_page) = options.per_page {
