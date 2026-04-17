@@ -29,6 +29,11 @@ pub(crate) struct Config {
 impl Config {
     /// Creates a new [`Config`] with the given API key.
     pub fn new(api_key: &str) -> Self {
+        Self::with_base_url(api_key, BASE_URL)
+    }
+
+    /// Creates a new [`Config`] with a custom base URL.
+    pub fn with_base_url(api_key: &str, base_url: &str) -> Self {
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
@@ -48,14 +53,8 @@ impl Config {
 
         Self {
             http,
-            base_url: BASE_URL.to_owned(),
+            base_url: base_url.to_owned(),
         }
-    }
-
-    /// Override the base URL (useful for testing).
-    #[allow(dead_code)]
-    pub fn set_base_url(&mut self, base_url: impl Into<String>) {
-        self.base_url = base_url.into();
     }
 
     /// Build an HTTP request for the given method and path.

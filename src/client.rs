@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::config::Config;
 use crate::domains::DomainsSvc;
 use crate::emails::EmailsSvc;
+use crate::projects::ProjectsSvc;
 use crate::templates::TemplatesSvc;
 use crate::webhooks::WebhooksSvc;
 
@@ -33,10 +34,12 @@ pub struct Lettr {
     pub emails: EmailsSvc,
     /// Domain management.
     pub domains: DomainsSvc,
-    /// Webhook listing and retrieval.
+    /// Webhook management.
     pub webhooks: WebhooksSvc,
-    /// Template listing and creation.
+    /// Template management.
     pub templates: TemplatesSvc,
+    /// Project listing.
+    pub projects: ProjectsSvc,
 
     config: Arc<Config>,
 }
@@ -50,12 +53,25 @@ impl Lettr {
     #[must_use]
     pub fn new(api_key: &str) -> Self {
         let config = Arc::new(Config::new(api_key));
+        Self::from_config(config)
+    }
 
+    /// Creates a new [`Lettr`] client with a custom base URL.
+    ///
+    /// This is useful for testing against a mock server.
+    #[must_use]
+    pub fn with_base_url(api_key: &str, base_url: &str) -> Self {
+        let config = Arc::new(Config::with_base_url(api_key, base_url));
+        Self::from_config(config)
+    }
+
+    fn from_config(config: Arc<Config>) -> Self {
         Self {
             emails: EmailsSvc(Arc::clone(&config)),
             domains: DomainsSvc(Arc::clone(&config)),
             webhooks: WebhooksSvc(Arc::clone(&config)),
             templates: TemplatesSvc(Arc::clone(&config)),
+            projects: ProjectsSvc(Arc::clone(&config)),
             config,
         }
     }
