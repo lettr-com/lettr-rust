@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MergeTag`: added `merge_tag_type` (`type` in JSON), `children`
 - `Template`: `folder_id` changed from `Option<u64>` to `u64` (always present per spec)
 - `CreateTemplateResponse`: `folder_id` changed from `Option<u64>` to `u64`
+- `ErrorCode`: added `RetrievalError` variant (matches new `retrieval_error` code in the Lettr API)
+- **BREAKING**: Webhook engagement event constants (`event_types::CLICK`, `OPEN`, `INITIAL_OPEN`, `AMP_CLICK`, `AMP_OPEN`, `AMP_INITIAL_OPEN`) now emit `engagement.*` instead of `engagament.*` — the API fixed the typo upstream
 
 ## [0.1.0] - 2024
 
