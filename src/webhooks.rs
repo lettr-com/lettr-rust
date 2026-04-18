@@ -74,8 +74,6 @@ impl std::fmt::Display for WebhookEventsMode {
 /// Webhook event type constants.
 ///
 /// Use these when creating or updating webhooks with `WebhookEventsMode::Selected`.
-///
-/// Note: The engagement event names use `engagament` (missing an 'e') to match the API spec.
 pub mod event_types {
     // Message events
     pub const INJECTION: &str = "message.injection";
@@ -86,13 +84,13 @@ pub mod event_types {
     pub const SPAM_COMPLAINT: &str = "message.spam_complaint";
     pub const POLICY_REJECTION: &str = "message.policy_rejection";
 
-    // Engagement events (note: "engagament" spelling matches the API)
-    pub const CLICK: &str = "engagament.click";
-    pub const OPEN: &str = "engagament.open";
-    pub const INITIAL_OPEN: &str = "engagament.initial_open";
-    pub const AMP_CLICK: &str = "engagament.amp_click";
-    pub const AMP_OPEN: &str = "engagament.amp_open";
-    pub const AMP_INITIAL_OPEN: &str = "engagament.amp_initial_open";
+    // Engagement events
+    pub const CLICK: &str = "engagement.click";
+    pub const OPEN: &str = "engagement.open";
+    pub const INITIAL_OPEN: &str = "engagement.initial_open";
+    pub const AMP_CLICK: &str = "engagement.amp_click";
+    pub const AMP_OPEN: &str = "engagement.amp_open";
+    pub const AMP_INITIAL_OPEN: &str = "engagement.amp_initial_open";
 
     // Generation events
     pub const GENERATION_FAILURE: &str = "generation.generation_failure";
