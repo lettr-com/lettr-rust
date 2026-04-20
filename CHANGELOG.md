@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-20
+
+Promotes the current API surface to a stable `1.0.0` release. No code changes since `0.3.0` — from this point on, breaking changes require a major version bump (see `RELEASING.md`).
+
+## [0.3.0] - 2026-04-18
+
+### Changed
+- `ErrorCode`: added `RetrievalError` variant (matches new `retrieval_error` code in the Lettr API)
+- **BREAKING**: Webhook engagement event constants (`event_types::CLICK`, `OPEN`, `INITIAL_OPEN`, `AMP_CLICK`, `AMP_OPEN`, `AMP_INITIAL_OPEN`) now emit `engagement.*` instead of `engagament.*` — the API fixed the typo upstream
+
+## [0.2.0] - 2026-04-17
+
 ### Added
 - `GET /emails/events` — `emails.list_events()` with filters (events, recipients, date range, transmissions, bounce_classes)
 - `POST /emails/scheduled` — `emails.schedule()` with `ScheduleEmailOptions`
@@ -44,8 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MergeTag`: added `merge_tag_type` (`type` in JSON), `children`
 - `Template`: `folder_id` changed from `Option<u64>` to `u64` (always present per spec)
 - `CreateTemplateResponse`: `folder_id` changed from `Option<u64>` to `u64`
-- `ErrorCode`: added `RetrievalError` variant (matches new `retrieval_error` code in the Lettr API)
-- **BREAKING**: Webhook engagement event constants (`event_types::CLICK`, `OPEN`, `INITIAL_OPEN`, `AMP_CLICK`, `AMP_OPEN`, `AMP_INITIAL_OPEN`) now emit `engagement.*` instead of `engagament.*` — the API fixed the typo upstream
 
 ## [0.1.0] - 2024
 
@@ -60,5 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `GET /health`, `GET /auth/check` — health and auth endpoints
 - `native-tls`, `rustls-tls`, `blocking` feature flags
 
-[Unreleased]: https://github.com/lettr/lettr-rust/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/lettr/lettr-rust/compare/v0.3.0...v1.0.0
+[0.3.0]: https://github.com/lettr/lettr-rust/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/lettr/lettr-rust/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lettr/lettr-rust/releases/tag/v0.1.0
