@@ -14,7 +14,7 @@ Add `lettr` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lettr = "0.1"
+lettr = "1.0"
 ```
 
 Or with the Cargo CLI:
@@ -339,7 +339,7 @@ Enable the `blocking` feature for synchronous usage:
 
 ```toml
 [dependencies]
-lettr = { version = "0.1", features = ["blocking"] }
+lettr = { version = "1.0", features = ["blocking"] }
 ```
 
 ```rust,ignore

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-04-20
+
+### Fixed
+- README installation snippets updated to reference `lettr = "1.0"` (were still showing `"0.1"`)
+
 ## [1.0.0] - 2026-04-20
 
 Promotes the current API surface to a stable `1.0.0` release. No code changes since `0.3.0` — from this point on, breaking changes require a major version bump (see `RELEASING.md`).
@@ -70,7 +75,8 @@ Promotes the current API surface to a stable `1.0.0` release. No code changes si
 - `GET /health`, `GET /auth/check` — health and auth endpoints
 - `native-tls`, `rustls-tls`, `blocking` feature flags
 
-[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/lettr/lettr-rust/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/lettr/lettr-rust/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/lettr/lettr-rust/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lettr/lettr-rust/compare/v0.1.0...v0.2.0
