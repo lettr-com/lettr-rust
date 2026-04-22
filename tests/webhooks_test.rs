@@ -183,7 +183,26 @@ fn create_webhook_serialization() {
 }
 
 #[test]
-fn update_webhook_serialization() {
+fn update_webhook_url_serialization() {
+    let options = lettr::webhooks::UpdateWebhookOptions::new()
+        .with_name("New Name")
+        .with_url("https://new.example.com/hook")
+        .with_active(true);
+
+    let json = serde_json::to_value(&options).unwrap();
+    assert_eq!(json["name"], "New Name");
+    assert_eq!(json["url"], "https://new.example.com/hook");
+    assert_eq!(json["active"], true);
+    // `target` is the deprecated alias — must not be serialized when using `with_url`.
+    assert!(json.get("target").is_none());
+    // Fields not set should not be present
+    assert!(json.get("auth_type").is_none());
+    assert!(json.get("events").is_none());
+}
+
+#[test]
+#[allow(deprecated)]
+fn update_webhook_target_serialization_backwards_compat() {
     let options = lettr::webhooks::UpdateWebhookOptions::new()
         .with_name("New Name")
         .with_target("https://new.example.com/hook")
@@ -193,7 +212,6 @@ fn update_webhook_serialization() {
     assert_eq!(json["name"], "New Name");
     assert_eq!(json["target"], "https://new.example.com/hook");
     assert_eq!(json["active"], true);
-    // Fields not set should not be present
-    assert!(json.get("auth_type").is_none());
-    assert!(json.get("events").is_none());
+    // `url` is absent because the caller only set the deprecated `target` field.
+    assert!(json.get("url").is_none());
 }
