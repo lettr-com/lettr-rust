@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-22
+
+### Added
+- `UpdateWebhookOptions::with_url()` — sets the webhook destination on `PUT /webhooks/{id}`, matching the field name used by `POST /webhooks`.
+
+### Deprecated
+- `UpdateWebhookOptions::with_target()` — use `with_url()` instead. The `target` field is still serialized when set, so pre-1.1 callers keep working until the server drops support.
+
+### Notes
+- Webhook event types are sent and received with their namespace prefix (`message.*`, `engagement.*`, `generation.*`, `unsubscribe.*`, `relay.*`). The `event_types::*` constants already emit the namespaced form — no caller-side change required.
+
 ## [1.0.1] - 2026-04-20
 
 ### Fixed
@@ -75,8 +86,8 @@ Promotes the current API surface to a stable `1.0.0` release. No code changes si
 - `GET /health`, `GET /auth/check` — health and auth endpoints
 - `native-tls`, `rustls-tls`, `blocking` feature flags
 
-[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.0.1...HEAD
-[1.0.1]: https://github.com/lettr/lettr-rust/compare/v1.0.0...v1.0.1
+[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/lettr/lettr-rust/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/lettr/lettr-rust/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/lettr/lettr-rust/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lettr/lettr-rust/compare/v0.1.0...v0.2.0

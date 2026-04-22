@@ -74,6 +74,10 @@ impl std::fmt::Display for WebhookEventsMode {
 /// Webhook event type constants.
 ///
 /// Use these when creating or updating webhooks with `WebhookEventsMode::Selected`.
+///
+/// All values are fully namespaced (e.g. `message.injection`, `engagement.click`);
+/// the API requires the namespaced form on both `POST` and `PUT` requests and
+/// emits the same form in the `event_types` field of the webhook payload.
 pub mod event_types {
     // Message events
     pub const INJECTION: &str = "message.injection";
@@ -342,6 +346,11 @@ pub struct UpdateWebhookOptions {
     name: Option<String>,
     /// URL where webhook events will be sent.
     #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    /// Deprecated alias for `url`. Kept for backwards compatibility with
+    /// callers written against pre-1.1 SDKs; the server still accepts
+    /// `target` but prefers `url`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     target: Option<String>,
     /// Authentication type.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -382,7 +391,15 @@ impl UpdateWebhookOptions {
         self
     }
 
+    /// Sets the webhook destination URL.
+    #[inline]
+    pub fn with_url(mut self, url: impl Into<String>) -> Self {
+        self.url = Some(url.into());
+        self
+    }
+
     /// Sets the webhook target URL.
+    #[deprecated(since = "1.1.0", note = "use `with_url` instead")]
     #[inline]
     pub fn with_target(mut self, target: impl Into<String>) -> Self {
         self.target = Some(target.into());
