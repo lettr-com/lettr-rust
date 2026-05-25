@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["CreateDomainResponse","DkimDnsRecord","DkimInfo","DnsRecords","Domain","DomainDetail","DomainsSvc"]};

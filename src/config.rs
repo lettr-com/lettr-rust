@@ -63,6 +63,29 @@ impl Config {
         self.http.request(method, url)
     }
 
+    /// Percent-encode a value for safe use as a single URL path segment.
+    ///
+    /// Encodes every byte that is not an RFC 3986 unreserved character
+    /// (ALPHA / DIGIT / "-" / "." / "_" / "~"). This is conservative: it
+    /// also encodes sub-delims like ":" and "@" that are legal in path
+    /// segments, but doing so is harmless and avoids surprises if a caller
+    /// passes a value containing structural characters like "/", "?", or "#".
+    pub(crate) fn encode_path_segment(value: &str) -> String {
+        let mut out = String::with_capacity(value.len());
+        for byte in value.as_bytes() {
+            match byte {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                    out.push(*byte as char);
+                }
+                other => {
+                    out.push('%');
+                    out.push_str(&format!("{other:02X}"));
+                }
+            }
+        }
+        out
+    }
+
     /// Send a built request and handle non-success status codes.
     ///
     /// Returns the raw response on success, or an appropriate error.
