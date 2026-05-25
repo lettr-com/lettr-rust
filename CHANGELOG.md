@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-25
+
+### Added
+- Full `/audience` namespace as nested sub-services under `client.audience.*`, covering all 28 audience endpoints from the OpenAPI spec:
+  - `audience.lists` — `list`, `create`, `get`, `update`, `delete`, `bulk_delete`
+  - `audience.contacts` — `list`, `create`, `bulk_create`, `get`, `update`, `delete`, `attach_to_list`, `detach_from_list`, `bulk_attach_to_lists`, `bulk_detach_from_lists`, `subscribe_to_topic`, `unsubscribe_from_topic`
+  - `audience.topics` — `list`, `create`, `get`, `update`, `delete`
+  - `audience.properties` — `list`, `create`, `get`, `update`, `delete`
+  - `audience.segments` — `list`, `create`, `get`, `update`, `delete`
+- New public types re-exported under `lettr::types::*` and services under `lettr::services::*` (`AudienceList`, `AudienceContact`, `AudienceTopic`, `AudienceProperty`, `AudienceSegment`, `SegmentCondition`, `SegmentOperator`, `DoubleOptInConfig`, builders, response wrappers, and enums for status/visibility/property type).
+- `clear_description()` on `UpdateAudienceTopicOptions`, `clear_fallback_value()` on `UpdateAudiencePropertyOptions`, and `clear_list_id()` on `UpdateAudienceSegmentOptions` for sending JSON `null` to clear nullable fields.
+- `Config::encode_path_segment()` — RFC 3986 percent-encoding helper applied to every audience path-interpolation site so IDs containing `/`, `?`, `#`, or other reserved characters are safely encoded.
+
+### Fixed
+- `AudienceContact.properties` now tolerates the PHP `[]` shape that the API returns for contacts with no custom properties (PHP's `json_encode` serializes empty associative arrays as `[]` instead of `{}`). A non-empty array still errors.
+- `AudienceTopic.created_at` is now `Option<String>` to match the spec, which marks it nullable.
+
+### Notes
+- `BulkContactListMembershipOptions` uses a named-builder pattern (`new().with_contact_ids(...).with_list_ids(...)`) instead of positional arguments, preventing accidental swap of the two `Vec<String>` lists.
+- The `/audience/confirm/{token}` endpoint is intentionally excluded — it's a public confirmation flow not meant for SDK callers.
+
 ## [1.1.0] - 2026-04-22
 
 ### Added
@@ -86,7 +107,8 @@ Promotes the current API surface to a stable `1.0.0` release. No code changes si
 - `GET /health`, `GET /auth/check` — health and auth endpoints
 - `native-tls`, `rustls-tls`, `blocking` feature flags
 
-[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/lettr/lettr-rust/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/lettr/lettr-rust/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/lettr/lettr-rust/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/lettr/lettr-rust/compare/v0.2.0...v0.3.0

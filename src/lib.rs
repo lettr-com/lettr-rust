@@ -5,6 +5,7 @@ pub use client::Lettr;
 pub use emails::{Attachment, CreateEmailOptions};
 pub use error::Error;
 
+pub mod audience;
 mod client;
 pub(crate) mod config;
 pub mod domains;
@@ -17,6 +18,10 @@ pub mod webhooks;
 pub mod services {
     //! Re-exports of all service types for convenient access.
 
+    pub use super::audience::{
+        AudienceContactsSvc, AudienceListsSvc, AudiencePropertiesSvc, AudienceSegmentsSvc,
+        AudienceSvc, AudienceTopicsSvc,
+    };
     pub use super::domains::DomainsSvc;
     pub use super::emails::EmailsSvc;
     pub use super::projects::ProjectsSvc;
@@ -63,6 +68,47 @@ pub mod types {
     // Projects
     pub use super::projects::{
         ListProjectsOptions, ListProjectsResponse, Project, ProjectsPagination,
+    };
+
+    // Audience (shared)
+    pub use super::audience::AudiencePagination;
+
+    // Audience: lists
+    pub use super::audience::lists::{
+        AudienceList, BulkDeleteAudienceListsOptions, BulkDeleteAudienceListsResponse,
+        CreateAudienceListOptions, ListAudienceListsOptions, ListAudienceListsResponse,
+        UpdateAudienceListOptions,
+    };
+
+    // Audience: contacts
+    pub use super::audience::contacts::{
+        AudienceContact, AudienceContactListLink, AudienceContactStatus, AudienceContactTopicLink,
+        BulkAttachContactsToListsResponse, BulkContactListMembershipOptions,
+        BulkCreateAudienceContactsOptions, BulkCreateAudienceContactsResponse,
+        BulkDetachContactsFromListsResponse, CreateAudienceContactOptions, DoubleOptInConfig,
+        ListAudienceContactsOptions, ListAudienceContactsResponse, UpdateAudienceContactOptions,
+        UpdateAudienceContactStatus,
+    };
+
+    // Audience: topics
+    pub use super::audience::topics::{
+        AudienceTopic, AudienceTopicDefaultSubscription, AudienceTopicVisibility,
+        CreateAudienceTopicOptions, ListAudienceTopicsOptions, ListAudienceTopicsResponse,
+        UpdateAudienceTopicOptions,
+    };
+
+    // Audience: properties
+    pub use super::audience::properties::{
+        AudienceProperty, AudiencePropertyType, CreateAudiencePropertyOptions,
+        ListAudiencePropertiesOptions, ListAudiencePropertiesResponse,
+        UpdateAudiencePropertyOptions,
+    };
+
+    // Audience: segments
+    pub use super::audience::segments::{
+        AudienceSegment, CreateAudienceSegmentOptions, ListAudienceSegmentsOptions,
+        ListAudienceSegmentsResponse, SegmentCondition, SegmentConditionGroup,
+        SegmentConditionsInput, SegmentOperator, UpdateAudienceSegmentOptions,
     };
 
     // Errors
