@@ -117,7 +117,9 @@ impl AudienceContactsSvc {
             .build(Method::POST, "/audience/contacts")
             .json(&options);
         let response = self.0.send(request).await?;
-        let wrapper = response.json::<ShowAudienceContactResponseWrapper>().await?;
+        let wrapper = response
+            .json::<ShowAudienceContactResponseWrapper>()
+            .await?;
         Ok(wrapper.data)
     }
 
@@ -147,7 +149,9 @@ impl AudienceContactsSvc {
         );
         let request = self.0.build(Method::GET, &path);
         let response = self.0.send(request).await?;
-        let wrapper = response.json::<ShowAudienceContactResponseWrapper>().await?;
+        let wrapper = response
+            .json::<ShowAudienceContactResponseWrapper>()
+            .await?;
         Ok(wrapper.data)
     }
 
@@ -164,7 +168,9 @@ impl AudienceContactsSvc {
         );
         let request = self.0.build(Method::PATCH, &path).json(&options);
         let response = self.0.send(request).await?;
-        let wrapper = response.json::<ShowAudienceContactResponseWrapper>().await?;
+        let wrapper = response
+            .json::<ShowAudienceContactResponseWrapper>()
+            .await?;
         Ok(wrapper.data)
     }
 
@@ -242,11 +248,7 @@ impl AudienceContactsSvc {
 
     /// Subscribe a contact to a topic.
     #[maybe_async::maybe_async]
-    pub async fn subscribe_to_topic(
-        &self,
-        contact_id: &str,
-        topic_id: &str,
-    ) -> crate::Result<()> {
+    pub async fn subscribe_to_topic(&self, contact_id: &str, topic_id: &str) -> crate::Result<()> {
         let path = format!(
             "/audience/contacts/{}/topics/{}",
             Config::encode_path_segment(contact_id),

@@ -81,9 +81,7 @@ async fn get_audience_list() {
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
-        .and(path(
-            "/audience/lists/9b9c0e9a-0000-0000-0000-000000000001",
-        ))
+        .and(path("/audience/lists/9b9c0e9a-0000-0000-0000-000000000001"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "message": "Audience list retrieved successfully.",
             "data": audience_list_json()
@@ -106,9 +104,7 @@ async fn update_audience_list() {
     let server = MockServer::start().await;
 
     Mock::given(method("PATCH"))
-        .and(path(
-            "/audience/lists/9b9c0e9a-0000-0000-0000-000000000001",
-        ))
+        .and(path("/audience/lists/9b9c0e9a-0000-0000-0000-000000000001"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "message": "Audience list updated successfully.",
             "data": {
@@ -138,9 +134,7 @@ async fn delete_audience_list() {
     let server = MockServer::start().await;
 
     Mock::given(method("DELETE"))
-        .and(path(
-            "/audience/lists/9b9c0e9a-0000-0000-0000-000000000001",
-        ))
+        .and(path("/audience/lists/9b9c0e9a-0000-0000-0000-000000000001"))
         .respond_with(ResponseTemplate::new(204))
         .mount(&server)
         .await;

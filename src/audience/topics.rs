@@ -98,7 +98,10 @@ impl AudienceTopicsSvc {
         &self,
         options: CreateAudienceTopicOptions,
     ) -> crate::Result<AudienceTopic> {
-        let request = self.0.build(Method::POST, "/audience/topics").json(&options);
+        let request = self
+            .0
+            .build(Method::POST, "/audience/topics")
+            .json(&options);
         let response = self.0.send(request).await?;
         let wrapper = response.json::<ShowAudienceTopicResponseWrapper>().await?;
         Ok(wrapper.data)

@@ -155,8 +155,8 @@ fn create_property_serializes_type() {
 
 #[test]
 fn update_property_clear_serializes_null() {
-    let opts = lettr::audience::properties::UpdateAudiencePropertyOptions::new()
-        .clear_fallback_value();
+    let opts =
+        lettr::audience::properties::UpdateAudiencePropertyOptions::new().clear_fallback_value();
     let json = serde_json::to_value(&opts).unwrap();
     assert!(json["fallback_value"].is_null());
 }

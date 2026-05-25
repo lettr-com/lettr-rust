@@ -80,10 +80,12 @@ async fn create_audience_segment() {
     let segment = client(&server)
         .audience
         .segments
-        .create(lettr::audience::segments::CreateAudienceSegmentOptions::new(
-            "Active subscribers",
-            conditions,
-        ))
+        .create(
+            lettr::audience::segments::CreateAudienceSegmentOptions::new(
+                "Active subscribers",
+                conditions,
+            ),
+        )
         .await
         .unwrap();
 
@@ -185,7 +187,10 @@ fn create_segment_serialization() {
 
     assert_eq!(json["name"], "Example");
     assert_eq!(json["list_id"], "list-1");
-    assert_eq!(json["conditions"]["groups"][0]["conditions"][0]["field"], "email");
+    assert_eq!(
+        json["conditions"]["groups"][0]["conditions"][0]["field"],
+        "email"
+    );
     assert_eq!(
         json["conditions"]["groups"][0]["conditions"][0]["operator"],
         "contains"

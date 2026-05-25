@@ -269,7 +269,9 @@ async fn attach_contact_to_list_encodes_special_characters_in_path() {
     // — a totally different route. With encoding it becomes
     // `/audience/contacts/abc%2Flists%2Fl1%3Ffoo/lists/list-1`.
     Mock::given(method("POST"))
-        .and(path("/audience/contacts/abc%2Flists%2Fl1%3Ffoo/lists/list-1"))
+        .and(path(
+            "/audience/contacts/abc%2Flists%2Fl1%3Ffoo/lists/list-1",
+        ))
         .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
             "message": "Attached."
         })))
@@ -432,8 +434,14 @@ fn create_contact_with_double_opt_in_serialization() {
     assert_eq!(json["email"], "alice@example.com");
     assert_eq!(json["double_opt_in"]["from"], "noreply@example.com");
     assert_eq!(json["double_opt_in"]["from_name"], "Example Team");
-    assert_eq!(json["double_opt_in"]["subject"], "Confirm your subscription");
-    assert_eq!(json["double_opt_in"]["template_slug"], "confirm-subscription");
+    assert_eq!(
+        json["double_opt_in"]["subject"],
+        "Confirm your subscription"
+    );
+    assert_eq!(
+        json["double_opt_in"]["template_slug"],
+        "confirm-subscription"
+    );
     assert_eq!(
         json["double_opt_in"]["redirect_url"],
         "https://example.com/confirmed"
@@ -448,8 +456,8 @@ fn update_contact_clears_property_with_null() {
     properties.insert("first_name".to_string(), None);
     properties.insert("city".to_string(), Some("Prague".to_string()));
 
-    let opts = lettr::audience::contacts::UpdateAudienceContactOptions::new()
-        .with_properties(properties);
+    let opts =
+        lettr::audience::contacts::UpdateAudienceContactOptions::new().with_properties(properties);
     let json = serde_json::to_value(&opts).unwrap();
 
     // `None` value must serialize to JSON null (not be skipped) so the server clears the property.

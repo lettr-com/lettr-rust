@@ -67,10 +67,7 @@ impl AudienceListsSvc {
     /// # }
     /// ```
     #[maybe_async::maybe_async]
-    pub async fn create(
-        &self,
-        options: CreateAudienceListOptions,
-    ) -> crate::Result<AudienceList> {
+    pub async fn create(&self, options: CreateAudienceListOptions) -> crate::Result<AudienceList> {
         let request = self.0.build(Method::POST, "/audience/lists").json(&options);
         let response = self.0.send(request).await?;
         let wrapper = response.json::<ShowAudienceListResponseWrapper>().await?;

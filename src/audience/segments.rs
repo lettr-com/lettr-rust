@@ -99,7 +99,9 @@ impl AudienceSegmentsSvc {
             .build(Method::POST, "/audience/segments")
             .json(&options);
         let response = self.0.send(request).await?;
-        let wrapper = response.json::<ShowAudienceSegmentResponseWrapper>().await?;
+        let wrapper = response
+            .json::<ShowAudienceSegmentResponseWrapper>()
+            .await?;
         Ok(wrapper.data)
     }
 
@@ -112,7 +114,9 @@ impl AudienceSegmentsSvc {
         );
         let request = self.0.build(Method::GET, &path);
         let response = self.0.send(request).await?;
-        let wrapper = response.json::<ShowAudienceSegmentResponseWrapper>().await?;
+        let wrapper = response
+            .json::<ShowAudienceSegmentResponseWrapper>()
+            .await?;
         Ok(wrapper.data)
     }
 
@@ -129,7 +133,9 @@ impl AudienceSegmentsSvc {
         );
         let request = self.0.build(Method::PATCH, &path).json(&options);
         let response = self.0.send(request).await?;
-        let wrapper = response.json::<ShowAudienceSegmentResponseWrapper>().await?;
+        let wrapper = response
+            .json::<ShowAudienceSegmentResponseWrapper>()
+            .await?;
         Ok(wrapper.data)
     }
 
