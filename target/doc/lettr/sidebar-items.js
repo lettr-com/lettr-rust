@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["domains","emails","error","services","templates","types","webhooks"],"struct":["Lettr"],"type":["Result"]};

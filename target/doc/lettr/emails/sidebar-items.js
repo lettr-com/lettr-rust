@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["Attachment","CreateEmailOptions","EmailEvent","EmailEventDetail","EmailOptions","EmailsSvc","GetEmailResponse","ListEmailsOptions","ListEmailsResponse","Pagination","SendEmailResponse"]};

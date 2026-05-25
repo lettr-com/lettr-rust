@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["CreateTemplateOptions","CreateTemplateResponse","ListTemplatesOptions","ListTemplatesResponse","MergeTag","Template","TemplatePagination","TemplatesSvc"]};
