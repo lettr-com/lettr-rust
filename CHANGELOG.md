@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-28
+
+### Added
+- Full `/campaigns` namespace as a top-level service under `client.campaigns.*`, covering all 6 campaign endpoints from the OpenAPI spec:
+  - `GET /campaigns` — `campaigns.list()` with optional `status` filter and pagination
+  - `GET /campaigns/{id}` — `campaigns.get()` returning `CampaignDetail` (campaign + rendered HTML)
+  - `GET /campaigns/{id}/events` — `campaigns.list_events()` with cursor-based pagination and filters (event type, email, date range)
+  - `POST /campaigns/{id}/send` — `campaigns.send()` to dispatch a draft immediately
+  - `POST /campaigns/{id}/schedule` — `campaigns.schedule()` with `ScheduleCampaignOptions`
+  - `POST /campaigns/{id}/unschedule` — `campaigns.unschedule()` to cancel a scheduled send
+- New public types re-exported under `lettr::types::*` and the service under `lettr::services::CampaignsSvc`: `Campaign`, `CampaignDetail`, `CampaignStats`, `CampaignStatus`, `CampaignEvent`, `CampaignEventType`, `CampaignPagination`, request builders (`ListCampaignsOptions`, `ListCampaignEventsOptions`, `ScheduleCampaignOptions`), and response types (`ListCampaignsResponse`, `ListCampaignEventsResponse`).
+
+### Notes
+- The action endpoints (`send`, `schedule`, `unschedule`) return `Option<Campaign>` because the API may omit the `data` field if the campaign can't be re-read after the action (e.g. concurrent deletion).
+- `list_events` uses cursor-based pagination — keep requesting with the returned `next_cursor` until it is `None`. When a filter is applied, an empty `events` page with a non-`None` `next_cursor` is normal mid-stream; continue paginating.
+- The `send`, `schedule`, and `unschedule` endpoints are not available to sandbox API keys (server-side enforcement; no client-side change).
+
 ## [1.2.0] - 2026-05-25
 
 ### Added
@@ -107,7 +124,8 @@ Promotes the current API surface to a stable `1.0.0` release. No code changes si
 - `GET /health`, `GET /auth/check` — health and auth endpoints
 - `native-tls`, `rustls-tls`, `blocking` feature flags
 
-[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/lettr/lettr-rust/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/lettr/lettr-rust/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/lettr/lettr-rust/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/lettr/lettr-rust/compare/v0.3.0...v1.0.0

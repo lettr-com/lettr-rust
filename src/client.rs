@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::audience::AudienceSvc;
+use crate::campaigns::CampaignsSvc;
 use crate::config::Config;
 use crate::domains::DomainsSvc;
 use crate::emails::EmailsSvc;
@@ -43,6 +44,8 @@ pub struct Lettr {
     pub projects: ProjectsSvc,
     /// Audience management: lists, contacts, topics, properties, and segments.
     pub audience: AudienceSvc,
+    /// Campaign listing, stats, engagement events, and dispatch/scheduling.
+    pub campaigns: CampaignsSvc,
 
     config: Arc<Config>,
 }
@@ -76,6 +79,7 @@ impl Lettr {
             templates: TemplatesSvc(Arc::clone(&config)),
             projects: ProjectsSvc(Arc::clone(&config)),
             audience: AudienceSvc::new(Arc::clone(&config)),
+            campaigns: CampaignsSvc(Arc::clone(&config)),
             config,
         }
     }
