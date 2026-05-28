@@ -158,7 +158,10 @@ async fn list_campaign_events() {
     assert_eq!(response.events.len(), 1);
     assert_eq!(response.events[0].event_type, CampaignEventType::Open);
     assert_eq!(response.events[0].email, "jane@example.com");
-    assert_eq!(response.events[0].user_agent.as_deref(), Some("Mozilla/5.0"));
+    assert_eq!(
+        response.events[0].user_agent.as_deref(),
+        Some("Mozilla/5.0")
+    );
     assert_eq!(response.next_cursor.as_deref(), Some("cursor-abc"));
 }
 
