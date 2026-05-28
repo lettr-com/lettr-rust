@@ -6,6 +6,7 @@ pub use emails::{Attachment, CreateEmailOptions};
 pub use error::Error;
 
 pub mod audience;
+pub mod campaigns;
 mod client;
 pub(crate) mod config;
 pub mod domains;
@@ -22,6 +23,7 @@ pub mod services {
         AudienceContactsSvc, AudienceListsSvc, AudiencePropertiesSvc, AudienceSegmentsSvc,
         AudienceSvc, AudienceTopicsSvc,
     };
+    pub use super::campaigns::CampaignsSvc;
     pub use super::domains::DomainsSvc;
     pub use super::emails::EmailsSvc;
     pub use super::projects::ProjectsSvc;
@@ -109,6 +111,13 @@ pub mod types {
         AudienceSegment, CreateAudienceSegmentOptions, ListAudienceSegmentsOptions,
         ListAudienceSegmentsResponse, SegmentCondition, SegmentConditionGroup,
         SegmentConditionsInput, SegmentOperator, UpdateAudienceSegmentOptions,
+    };
+
+    // Campaigns
+    pub use super::campaigns::{
+        Campaign, CampaignDetail, CampaignEvent, CampaignEventType, CampaignPagination,
+        CampaignStats, CampaignStatus, ListCampaignEventsOptions, ListCampaignEventsResponse,
+        ListCampaignsOptions, ListCampaignsResponse, ScheduleCampaignOptions,
     };
 
     // Errors
