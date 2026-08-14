@@ -483,3 +483,328 @@ fn bulk_membership_serialization() {
     assert_eq!(json["list_ids"][0], "l1");
     assert_eq!(json["contact_ids"].as_array().unwrap().len(), 2);
 }
+
+// ── TPL-2105: bulk contact import ──────────────────────────────────────────
+
+#[test]
+fn bulk_create_keeps_the_legacy_payload_byte_identical() {
+    // A pre-TPL-2105 call must serialize exactly as it did before: no
+    // "contacts" key, and no "update_existing" unless it was asked for.
+    let opts = lettr::audience::contacts::BulkCreateAudienceContactsOptions::new(vec![
+        "a@example.com".into(),
+        "b@example.com".into(),
+    ])
+    .with_list_id("list-1");
+
+    let json = serde_json::to_value(&opts).unwrap();
+
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "emails": ["a@example.com", "b@example.com"],
+            "list_id": "list-1"
+        })
+    );
+}
+
+#[test]
+fn bulk_create_serializes_per_contact_rows() {
+    let mut row_props = HashMap::new();
+    row_props.insert("plan".to_string(), "pro".to_string());
+
+    let opts = lettr::audience::contacts::BulkCreateAudienceContactsOptions::for_contacts(vec![
+        lettr::audience::contacts::BulkAudienceContactRow::new("cara@example.com")
+            .with_properties(row_props)
+            .with_list_ids(vec!["l-vip".into()]),
+        // Row-level opt-out must beat the batch-wide opt-in below.
+        lettr::audience::contacts::BulkAudienceContactRow::new("dan@example.com").with_topics(
+            vec![lettr::audience::contacts::AudienceTopicSubscription::opt_out("t-promos")],
+        ),
+    ])
+    .with_list_ids(vec!["l-everyone".into()])
+    .with_topics(vec![
+        lettr::audience::contacts::AudienceTopicSubscription::opt_in("t-promos"),
+    ])
+    .with_update_existing(true);
+
+    let json = serde_json::to_value(&opts).unwrap();
+
+    assert!(
+        json.get("emails").is_none(),
+        "unexpected emails key: {json}"
+    );
+    assert_eq!(json["contacts"][0]["email"], "cara@example.com");
+    assert_eq!(json["contacts"][0]["properties"]["plan"], "pro");
+    assert_eq!(json["contacts"][0]["list_ids"][0], "l-vip");
+    // A row with nothing extra carries only its address.
+    assert!(json["contacts"][1].get("properties").is_none());
+    assert_eq!(json["contacts"][1]["topics"][0]["subscription"], "opt_out");
+    assert_eq!(json["list_ids"][0], "l-everyone");
+    assert_eq!(json["topics"][0]["subscription"], "opt_in");
+    assert_eq!(json["update_existing"], true);
+}
+
+#[tokio::test]
+async fn bulk_create_with_rows_returns_contact_refs() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/audience/contacts/bulk"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+            "message": "ok",
+            "data": {
+                "created": 2,
+                "already_existed": 0,
+                "updated": 1,
+                "error_count": 0,
+                "errors": [],
+                "contacts": [
+                    { "id": "c1", "email": "cara@example.com", "created": true },
+                    { "id": "c2", "email": "dan@example.com", "created": false }
+                ]
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let response = client(&server)
+        .audience
+        .contacts
+        .bulk_create(
+            lettr::audience::contacts::BulkCreateAudienceContactsOptions::for_contacts(vec![
+                lettr::audience::contacts::BulkAudienceContactRow::new("cara@example.com"),
+                lettr::audience::contacts::BulkAudienceContactRow::new("dan@example.com"),
+            ]),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.updated, 1);
+    assert!(!response.has_errors());
+    // IDs come back in submission order, so no follow-up lookup is needed.
+    assert_eq!(response.contact_ids(), vec!["c1", "c2"]);
+    assert!(!response.contacts[1].created);
+    // id_for is case-insensitive: the API normalizes addresses.
+    assert_eq!(response.id_for("  CARA@example.com "), Some("c1"));
+    assert_eq!(response.id_for("nobody@example.com"), None);
+}
+
+#[tokio::test]
+async fn bulk_create_reports_skipped_rows() {
+    // Partial success: HTTP 201 with errors populated. The call returns Ok even
+    // though one row never landed — that is the trap this pins down.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/audience/contacts/bulk"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+            "message": "Contacts created successfully.",
+            "data": {
+                "created": 1,
+                "already_existed": 0,
+                "updated": 0,
+                "error_count": 1,
+                "errors": [{
+                    "index": 1,
+                    "email": "not-an-email",
+                    "error_code": "invalid_email",
+                    "error": "The email address is not valid."
+                }],
+                "contacts": [{ "id": "c1", "email": "cara@example.com", "created": true }]
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let response = client(&server)
+        .audience
+        .contacts
+        .bulk_create(
+            lettr::audience::contacts::BulkCreateAudienceContactsOptions::for_contacts(vec![
+                lettr::audience::contacts::BulkAudienceContactRow::new("cara@example.com"),
+                lettr::audience::contacts::BulkAudienceContactRow::new("not-an-email"),
+            ]),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.has_errors());
+    assert_eq!(response.error_count, 1);
+    assert_eq!(response.errors[0].index, 1);
+    assert_eq!(
+        response.errors[0].error_code,
+        lettr::audience::contacts::BulkAudienceContactErrorCode::InvalidEmail
+    );
+    assert_eq!(response.contacts.len(), 1);
+}
+
+#[tokio::test]
+async fn bulk_create_tolerates_a_pre_tpl_2105_response() {
+    // An API deployment older than TPL-2105 answers with just the two counters.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/audience/contacts/bulk"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+            "message": "ok",
+            "data": { "created": 2, "already_existed": 1 }
+        })))
+        .mount(&server)
+        .await;
+
+    let response = client(&server)
+        .audience
+        .contacts
+        .bulk_create(
+            lettr::audience::contacts::BulkCreateAudienceContactsOptions::new(vec![
+                "a@example.com".into(),
+            ]),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.updated, 0);
+    assert!(!response.has_errors());
+    assert!(response.contact_ids().is_empty());
+}
+
+#[test]
+fn bulk_contact_error_survives_an_unknown_code() {
+    // A code added server-side must stay readable rather than failing to parse.
+    let response: lettr::audience::contacts::BulkCreateAudienceContactsResponse =
+        serde_json::from_value(serde_json::json!({
+            "created": 0,
+            "already_existed": 0,
+            "error_count": 1,
+            "errors": [{
+                "index": 0,
+                "email": null,
+                "error_code": "some_future_code",
+                "error": "Nope."
+            }]
+        }))
+        .unwrap();
+
+    assert_eq!(
+        response.errors[0].error_code,
+        lettr::audience::contacts::BulkAudienceContactErrorCode::Unknown("some_future_code".into())
+    );
+    assert_eq!(
+        response.errors[0].error_code.to_string(),
+        "some_future_code"
+    );
+    assert!(response.errors[0].email.is_none());
+}
+
+#[tokio::test]
+async fn create_duplicate_contact_is_a_conflict() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/audience/contacts"))
+        .respond_with(ResponseTemplate::new(409).set_body_json(serde_json::json!({
+            "message": "A contact with the email jane@example.com already exists.",
+            "error_code": "resource_already_exists"
+        })))
+        .mount(&server)
+        .await;
+
+    let error = client(&server)
+        .audience
+        .contacts
+        .create(lettr::audience::contacts::CreateAudienceContactOptions::new("jane@example.com"))
+        .await
+        .unwrap_err();
+
+    // Previously a 500 send_error, which a retry-on-5xx policy would retry.
+    assert!(error.is_contact_already_exists());
+    assert_eq!(
+        error.error_code(),
+        Some(&lettr::error::ErrorCode::ResourceAlreadyExists)
+    );
+    assert!(matches!(error, lettr::Error::Api(_)));
+}
+
+#[tokio::test]
+async fn create_other_conflict_is_not_a_duplicate() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/audience/contacts"))
+        .respond_with(ResponseTemplate::new(409).set_body_json(serde_json::json!({
+            "message": "Something else conflicted.",
+            "error_code": "some_future_code"
+        })))
+        .mount(&server)
+        .await;
+
+    let error = client(&server)
+        .audience
+        .contacts
+        .create(lettr::audience::contacts::CreateAudienceContactOptions::new("jane@example.com"))
+        .await
+        .unwrap_err();
+
+    assert!(!error.is_contact_already_exists());
+}
+
+#[tokio::test]
+async fn bulk_subscribe_contacts_to_topics() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/audience/contacts/topics/bulk"))
+        .and(body_json(serde_json::json!({
+            "contact_ids": ["c1", "c2"],
+            "topic_ids": ["t1", "t2"]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "message": "ok",
+            "data": { "subscribed": 3, "already_subscribed": 1, "total_pairs": 4 }
+        })))
+        .mount(&server)
+        .await;
+
+    let response = client(&server)
+        .audience
+        .contacts
+        .bulk_subscribe_to_topics(
+            lettr::audience::contacts::BulkContactTopicMembershipOptions::new()
+                .with_contact_ids(vec!["c1".into(), "c2".into()])
+                .with_topic_ids(vec!["t1".into(), "t2".into()]),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.subscribed, 3);
+    assert_eq!(response.already_subscribed, 1);
+    // 2 contacts × 2 topics — the endpoint works over the Cartesian product.
+    assert_eq!(response.total_pairs, 4);
+}
+
+#[tokio::test]
+async fn bulk_unsubscribe_contacts_from_topics() {
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/audience/contacts/topics/bulk"))
+        // The body is the point: DELETE carries the pairs to remove.
+        .and(body_json(serde_json::json!({
+            "contact_ids": ["c1", "c2"],
+            "topic_ids": ["t1", "t2"]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "message": "ok",
+            "data": { "unsubscribed": 2, "total_pairs": 4 }
+        })))
+        .mount(&server)
+        .await;
+
+    let response = client(&server)
+        .audience
+        .contacts
+        .bulk_unsubscribe_from_topics(
+            lettr::audience::contacts::BulkContactTopicMembershipOptions::new()
+                .with_contact_ids(vec!["c1".into(), "c2".into()])
+                .with_topic_ids(vec!["t1".into(), "t2".into()]),
+        )
+        .await
+        .unwrap();
+
+    // Pairs that did not exist are ignored, so this is below total_pairs.
+    assert_eq!(response.unsubscribed, 2);
+    assert_eq!(response.total_pairs, 4);
+}

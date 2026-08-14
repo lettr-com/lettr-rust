@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Covers the reworked bulk contact import (TPL-2105) and the duplicate-create fix. Everything here is additive — code written against 1.3.0 keeps compiling and sends the exact same payloads.
+
+### Added
+
+- **Per-contact bulk create.** `BulkCreateAudienceContactsOptions::for_contacts` takes one `BulkAudienceContactRow` per contact, each with its own properties, lists and topic subscriptions — the alternative to the flat `::new(emails)` shape, which is unchanged
+
+  ```rust
+  let options = BulkCreateAudienceContactsOptions::for_contacts(vec![
+      BulkAudienceContactRow::new("cara@example.com")
+          .with_properties(props),
+      BulkAudienceContactRow::new("dan@example.com")
+          .with_topics(vec![AudienceTopicSubscription::opt_out("01h-promos")]),
+  ])
+  .with_list_ids(vec!["01h-everyone".into()])
+  .with_update_existing(true);
+  ```
+- `BulkAudienceContactRow` (`new`, `with_properties`, `with_list_ids`, `with_topics`) and `AudienceTopicSubscription` (with the `opt_in(id)` / `opt_out(id)` constructors), plus the `AudienceTopicSubscriptionState` enum
+- `AudienceTopicSubscriptionState` says what a request should *do* with a topic and is deliberately separate from a topic's `default_subscription`, which describes how the topic behaves for a contact that says nothing. An `opt_out` on a topic whose default is opt-out suppresses the auto-subscription in the same request instead of needing a second call
+- **Batch-wide `with_list_ids` and `with_topics`,** plus `with_update_existing`, on `BulkCreateAudienceContactsOptions`. Batch-wide lists and topics are unioned into every row; a row-level property key or opt-out wins over the batch-wide value. `with_update_existing(true)` merges properties (submitted keys overwrite, absent keys are preserved) and allows dropping a subscription. It is skipped when `false`, so a legacy payload stays byte-identical
+- **Bulk create now reports what happened per row.** `BulkCreateAudienceContactsResponse` gains `updated`, `error_count`, `errors` (`BulkAudienceContactError` — `index`, `email`, `error_code`, `error`) and `contacts` (`BulkAudienceContactRef` — `id`, `email`, `created`), plus the `has_errors()`, `contact_ids()` and `id_for(email)` methods. `created` and `already_existed` keep their exact meaning, and the new fields are `#[serde(default)]`, so the response also parses a pre-TPL-2105 body
+
+  A bulk create can **partially succeed**: rows that fail validation are skipped and returned in `errors` while the rest of the batch commits, and the call still returns HTTP 201. Check `has_errors()` — an `Ok` result does not mean every row landed
+
+  Note that `already_existed` and `updated` overlap by design. They answer different questions ("was the address already in the audience?" vs "did this request change the contact?"), so they do not sum to the row count: a contact that already existed and got attached to a list is counted in both
+- `BulkAudienceContactErrorCode` enum (`missing_email`, `invalid_email`, `invalid_property_value`, `unknown_property_key`, `unknown_list`, `unknown_topic`, `invalid_topic_subscription`), with an `Unknown(String)` variant so a code added server-side deserializes instead of failing — the same shape as the existing `ErrorCode` and `AudienceContactStatus` enums
+- **Bulk topic subscribe/unsubscribe** — 2 new methods on `client.audience.contacts`, mirroring the existing `bulk_attach_to_lists` / `bulk_detach_from_lists` pair:
+  - `bulk_subscribe_to_topics(BulkContactTopicMembershipOptions)` — `POST /audience/contacts/topics/bulk`, returns `BulkSubscribeContactsToTopicsResponse` (`subscribed`, `already_subscribed`, `total_pairs`)
+  - `bulk_unsubscribe_from_topics(BulkContactTopicMembershipOptions)` — `DELETE /audience/contacts/topics/bulk` with a request body, returns `BulkUnsubscribeContactsFromTopicsResponse` (`unsubscribed`, `total_pairs`). Pairs that do not exist are ignored
+
+  Both process every `contact_ids` × `topic_ids` combination (up to 1000 × 50). Feed them `contact_ids()` from a bulk create — no ID lookup needed
+- `Error::error_code()` — the API's `error_code` across both the `Api` and `Validation` variants, so callers can discriminate without matching on the variant first
+- `Error::is_contact_already_exists()` — the 409 that `audience.contacts.create` returns when the email is already in the team's audience. A client-correctable condition, **not** an outage: do not retry it; update the existing contact, or use `bulk_create` with `with_update_existing(true)`
+
+### Changed
+
+- Creating a contact whose email already exists now comes back as `Error::Api` with `ErrorCode::ResourceAlreadyExists` (HTTP 409). The API previously let this escape as HTTP 500 with the misleading `send_error` code, which names email delivery — not involved unless double opt-in is supplied. **If your retry policy retries 5xx, duplicate creates are no longer retried** — which was pointless anyway. Any error mapping or docs of yours that name `send_error` for this endpoint should be corrected
+
+  No new `Error` variant was introduced, so existing `match` arms over `Error` keep compiling
+- `BulkCreateAudienceContactsOptions` no longer always serializes `emails` — it is skipped when the `contacts` shape is used. Options built with `::new(emails)` serialize exactly as before
+
 ## [1.3.0] - 2026-05-28
 
 ### Added

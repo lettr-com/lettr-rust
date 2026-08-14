@@ -65,6 +65,56 @@ pub enum Error {
     Parse(String),
 }
 
+impl Error {
+    /// The machine-readable `error_code` the API sent, when there was one.
+    ///
+    /// Covers both the [`Api`](Self::Api) and [`Validation`](Self::Validation)
+    /// variants, so callers can discriminate without matching on the variant
+    /// first.
+    #[must_use]
+    pub fn error_code(&self) -> Option<&ErrorCode> {
+        match self {
+            Self::Api(e) => e.error_code.as_ref(),
+            Self::Validation(e) => e.error_code.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Whether this is the "contact already exists" conflict returned by
+    /// [`create`](crate::audience::contacts::AudienceContactsSvc::create) when
+    /// the email is already in the team's audience.
+    ///
+    /// ```rust,no_run
+    /// # use lettr::Lettr;
+    /// # use lettr::audience::contacts::CreateAudienceContactOptions;
+    /// # async fn run() -> lettr::Result<()> {
+    /// # let client = Lettr::new("your-api-key");
+    /// match client
+    ///     .audience
+    ///     .contacts
+    ///     .create(CreateAudienceContactOptions::new("jane@example.com"))
+    ///     .await
+    /// {
+    ///     Ok(contact) => println!("created {}", contact.id),
+    ///     Err(e) if e.is_contact_already_exists() => {
+    ///         // Client-correctable: update the existing contact instead.
+    ///     }
+    ///     Err(e) => return Err(e),
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// This is **not** a retryable failure. The API used to let a duplicate
+    /// escape as an HTTP 500 with the misleading `send_error` code (it names
+    /// email delivery, which is not involved); a retry-on-5xx policy would retry
+    /// it pointlessly. It is now a 409, and a 409 here must not be retried.
+    #[must_use]
+    pub fn is_contact_already_exists(&self) -> bool {
+        matches!(self.error_code(), Some(ErrorCode::ResourceAlreadyExists))
+    }
+}
+
 /// An error response from the Lettr API.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct ApiError {

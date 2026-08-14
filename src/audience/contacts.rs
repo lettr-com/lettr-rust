@@ -49,6 +49,58 @@ pub enum UpdateAudienceContactStatus {
     Unsubscribed,
 }
 
+/// What a write request should *do* with a topic.
+///
+/// Distinct from a topic's `default_subscription`, which describes how the
+/// topic behaves for a contact that says nothing. [`OptOut`] here also cancels
+/// the auto-subscription a topic whose default is `opt_out` would otherwise
+/// give a newly created contact, so a create and an unsubscribe fit in one
+/// request.
+///
+/// [`OptOut`]: AudienceTopicSubscriptionState::OptOut
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum AudienceTopicSubscriptionState {
+    OptIn,
+    OptOut,
+}
+
+/// Reason a single row was skipped during a bulk contact create.
+///
+/// These are per-row codes reported inside a `201` body — not the top-level
+/// [`ErrorCode`](crate::ErrorCode) of a failed request.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum BulkAudienceContactErrorCode {
+    MissingEmail,
+    InvalidEmail,
+    InvalidPropertyValue,
+    UnknownPropertyKey,
+    UnknownList,
+    UnknownTopic,
+    InvalidTopicSubscription,
+    /// A code added server-side that this SDK version does not know.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl std::fmt::Display for BulkAudienceContactErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingEmail => write!(f, "missing_email"),
+            Self::InvalidEmail => write!(f, "invalid_email"),
+            Self::InvalidPropertyValue => write!(f, "invalid_property_value"),
+            Self::UnknownPropertyKey => write!(f, "unknown_property_key"),
+            Self::UnknownList => write!(f, "unknown_list"),
+            Self::UnknownTopic => write!(f, "unknown_topic"),
+            Self::InvalidTopicSubscription => write!(f, "invalid_topic_subscription"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
 /// Service for the `/audience/contacts` endpoints (including list and topic memberships).
 #[derive(Clone, Debug)]
 pub struct AudienceContactsSvc(pub(crate) Arc<Config>);
@@ -107,6 +159,17 @@ impl AudienceContactsSvc {
     }
 
     /// Create a new audience contact.
+    ///
+    /// An email already in the team's audience comes back as
+    /// `Error::Api` with [`ErrorCode::ResourceAlreadyExists`] (HTTP 409) — see
+    /// [`Error::is_contact_already_exists`]. That is a client-correctable
+    /// condition, not an outage: **do not retry it.** Use [`update`] instead,
+    /// or [`bulk_create`] with `with_update_existing(true)`.
+    ///
+    /// [`ErrorCode::ResourceAlreadyExists`]: crate::ErrorCode::ResourceAlreadyExists
+    /// [`Error::is_contact_already_exists`]: crate::Error::is_contact_already_exists
+    /// [`update`]: Self::update
+    /// [`bulk_create`]: Self::bulk_create
     #[maybe_async::maybe_async]
     pub async fn create(
         &self,
@@ -123,7 +186,12 @@ impl AudienceContactsSvc {
         Ok(wrapper.data)
     }
 
-    /// Bulk-create audience contacts (1–1000 emails per request).
+    /// Bulk-create audience contacts (1–1000 rows per request).
+    ///
+    /// Rows that fail validation are skipped, not fatal: the call still returns
+    /// HTTP 201 and reports them in the response's `errors`. An `Ok` result does
+    /// not mean every row landed — check
+    /// [`BulkCreateAudienceContactsResponse::has_errors`].
     #[maybe_async::maybe_async]
     pub async fn bulk_create(
         &self,
@@ -274,6 +342,48 @@ impl AudienceContactsSvc {
         let request = self.0.build(Method::DELETE, &path);
         self.0.send(request).await?;
         Ok(())
+    }
+
+    /// Bulk-subscribe contacts to topics (the Cartesian product of
+    /// `contact_ids` × `topic_ids`, up to 1000 × 50).
+    ///
+    /// Feed it [`BulkCreateAudienceContactsResponse::contact_ids`] from a bulk
+    /// create — no ID lookup needed.
+    #[maybe_async::maybe_async]
+    pub async fn bulk_subscribe_to_topics(
+        &self,
+        options: BulkContactTopicMembershipOptions,
+    ) -> crate::Result<BulkSubscribeContactsToTopicsResponse> {
+        let request = self
+            .0
+            .build(Method::POST, "/audience/contacts/topics/bulk")
+            .json(&options);
+        let response = self.0.send(request).await?;
+        let wrapper = response
+            .json::<BulkSubscribeContactsToTopicsResponseWrapper>()
+            .await?;
+        Ok(wrapper.data)
+    }
+
+    /// Bulk-unsubscribe contacts from topics. Pairs that do not exist are
+    /// ignored.
+    ///
+    /// This is a `DELETE` carrying a request body, as
+    /// [`bulk_detach_from_lists`](Self::bulk_detach_from_lists) already is.
+    #[maybe_async::maybe_async]
+    pub async fn bulk_unsubscribe_from_topics(
+        &self,
+        options: BulkContactTopicMembershipOptions,
+    ) -> crate::Result<BulkUnsubscribeContactsFromTopicsResponse> {
+        let request = self
+            .0
+            .build(Method::DELETE, "/audience/contacts/topics/bulk")
+            .json(&options);
+        let response = self.0.send(request).await?;
+        let wrapper = response
+            .json::<BulkUnsubscribeContactsFromTopicsResponseWrapper>()
+            .await?;
+        Ok(wrapper.data)
     }
 }
 
@@ -428,38 +538,212 @@ impl CreateAudienceContactOptions {
     }
 }
 
+/// A topic and the subscription state to apply to it.
+///
+/// Used batch-wide on [`BulkCreateAudienceContactsOptions`] and per row on
+/// [`BulkAudienceContactRow`]. A row-level opt-out wins over a batch-level
+/// opt-in for that contact.
+///
+/// ```rust
+/// # use lettr::audience::contacts::AudienceTopicSubscription;
+/// let subscribe = AudienceTopicSubscription::opt_in("01h-newsletter");
+/// let suppress = AudienceTopicSubscription::opt_out("01h-promos");
+/// # let _ = (subscribe, suppress);
+/// ```
+#[must_use]
+#[derive(Debug, Clone, Serialize)]
+pub struct AudienceTopicSubscription {
+    /// Topic ID.
+    pub id: String,
+    /// What to do with the topic.
+    pub subscription: AudienceTopicSubscriptionState,
+}
+
+impl AudienceTopicSubscription {
+    /// Subscribes the contact to the topic.
+    pub fn opt_in(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            subscription: AudienceTopicSubscriptionState::OptIn,
+        }
+    }
+
+    /// Suppresses the topic for the contact — including a topic that would
+    /// otherwise auto-subscribe newly created contacts.
+    pub fn opt_out(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            subscription: AudienceTopicSubscriptionState::OptOut,
+        }
+    }
+}
+
+/// One contact in a bulk-create payload.
+///
+/// `list_ids` and `topics` here are applied **on top of** the batch-wide ones on
+/// [`BulkCreateAudienceContactsOptions`]; a property key here overrides the
+/// batch-wide value for the same key.
+///
+/// A row that fails validation is skipped rather than failing the request — it
+/// comes back in [`BulkCreateAudienceContactsResponse::errors`].
+#[must_use]
+#[derive(Debug, Clone, Serialize)]
+pub struct BulkAudienceContactRow {
+    email: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    properties: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    list_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    topics: Option<Vec<AudienceTopicSubscription>>,
+}
+
+impl BulkAudienceContactRow {
+    /// Creates a row for the given address. It inherits everything batch-wide
+    /// until the `with_*` methods add row-level values.
+    pub fn new(email: impl Into<String>) -> Self {
+        Self {
+            email: email.into(),
+            properties: None,
+            list_ids: None,
+            topics: None,
+        }
+    }
+
+    /// Sets property values for this contact. Each key must match a property
+    /// defined for the team, and wins over the batch-wide value.
+    #[inline]
+    pub fn with_properties(mut self, properties: HashMap<String, String>) -> Self {
+        self.properties = Some(properties);
+        self
+    }
+
+    /// Sets up to 50 lists for this row, on top of the batch-wide ones.
+    #[inline]
+    pub fn with_list_ids(mut self, list_ids: Vec<String>) -> Self {
+        self.list_ids = Some(list_ids);
+        self
+    }
+
+    /// Sets up to 50 topic subscriptions for this row.
+    #[inline]
+    pub fn with_topics(mut self, topics: Vec<AudienceTopicSubscription>) -> Self {
+        self.topics = Some(topics);
+        self
+    }
+}
+
 /// Options for bulk-creating audience contacts.
+///
+/// Two shapes are supported, and exactly one of them must be filled in:
+///
+/// - [`new`](Self::new) — a flat list of addresses that all share the batch-wide
+///   list, properties and topics. The original shape, unchanged.
+/// - [`for_contacts`](Self::for_contacts) — one [`BulkAudienceContactRow`] per
+///   contact, each with its own properties, lists and topic subscriptions.
+///
+/// Batch-wide `list_ids` and `topics` are unioned into every row; a row-level
+/// property key or opt-out wins over the batch-wide value.
+///
+/// ```rust
+/// # use lettr::audience::contacts::{
+/// #     AudienceTopicSubscription, BulkAudienceContactRow, BulkCreateAudienceContactsOptions,
+/// # };
+/// let options = BulkCreateAudienceContactsOptions::for_contacts(vec![
+///     BulkAudienceContactRow::new("cara@example.com"),
+///     BulkAudienceContactRow::new("dan@example.com")
+///         .with_topics(vec![AudienceTopicSubscription::opt_out("01h-promos")]),
+/// ])
+/// .with_list_ids(vec!["01h-everyone".into()])
+/// .with_update_existing(true);
+/// # let _ = options;
+/// ```
 #[must_use]
 #[derive(Debug, Clone, Serialize)]
 pub struct BulkCreateAudienceContactsOptions {
-    emails: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    emails: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     list_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     properties: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    contacts: Option<Vec<BulkAudienceContactRow>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    list_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    topics: Option<Vec<AudienceTopicSubscription>>,
+    // Skipped when false so a legacy payload stays byte-identical; the API
+    // defaults it to false anyway.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    update_existing: bool,
 }
 
 impl BulkCreateAudienceContactsOptions {
     /// Creates new options from a vector of email addresses (1–1000 items).
     pub fn new(emails: Vec<String>) -> Self {
         Self {
-            emails,
+            emails: Some(emails),
             list_id: None,
             properties: None,
+            contacts: None,
+            list_ids: None,
+            topics: None,
+            update_existing: false,
         }
     }
 
-    /// Attaches all created contacts to a list.
+    /// Creates new options from per-contact rows (1–1000 items), each with its
+    /// own properties, lists and topic subscriptions.
+    pub fn for_contacts(contacts: Vec<BulkAudienceContactRow>) -> Self {
+        Self {
+            emails: None,
+            list_id: None,
+            properties: None,
+            contacts: Some(contacts),
+            list_ids: None,
+            topics: None,
+            update_existing: false,
+        }
+    }
+
+    /// Attaches all created contacts to a list. Folded into `list_ids` server-side.
     #[inline]
     pub fn with_list_id(mut self, list_id: impl Into<String>) -> Self {
         self.list_id = Some(list_id.into());
         self
     }
 
-    /// Sets shared properties applied to every created contact.
+    /// Sets shared properties applied to every contact in the batch. A row's own
+    /// key wins over these.
     #[inline]
     pub fn with_properties(mut self, properties: HashMap<String, String>) -> Self {
         self.properties = Some(properties);
+        self
+    }
+
+    /// Sets up to 50 batch-wide lists, unioned into every row.
+    #[inline]
+    pub fn with_list_ids(mut self, list_ids: Vec<String>) -> Self {
+        self.list_ids = Some(list_ids);
+        self
+    }
+
+    /// Sets up to 50 batch-wide topic subscriptions.
+    #[inline]
+    pub fn with_topics(mut self, topics: Vec<AudienceTopicSubscription>) -> Self {
+        self.topics = Some(topics);
+        self
+    }
+
+    /// When `true`, existing contacts have their properties merged (submitted
+    /// keys overwrite, absent keys are preserved) and opt-outs applied.
+    ///
+    /// Defaults to `false`, in which case existing contacts keep their
+    /// properties but are still attached to the requested lists.
+    #[inline]
+    pub fn with_update_existing(mut self, update_existing: bool) -> Self {
+        self.update_existing = update_existing;
         self
     }
 }
@@ -547,6 +831,47 @@ impl BulkContactListMembershipOptions {
     }
 }
 
+/// Options for the bulk subscribe/unsubscribe contacts-to-topics endpoints.
+///
+/// Both directions take the same body and process the Cartesian product of
+/// `contact_ids` × `topic_ids`.
+///
+/// ```rust,no_run
+/// # use lettr::audience::contacts::BulkContactTopicMembershipOptions;
+/// let opts = BulkContactTopicMembershipOptions::new()
+///     .with_contact_ids(vec!["contact-1".into(), "contact-2".into()])
+///     .with_topic_ids(vec!["topic-1".into()]);
+/// # let _ = opts;
+/// ```
+#[must_use]
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct BulkContactTopicMembershipOptions {
+    contact_ids: Vec<String>,
+    topic_ids: Vec<String>,
+}
+
+impl BulkContactTopicMembershipOptions {
+    /// Creates empty options. The server requires both ID lists to be non-empty;
+    /// add them via [`Self::with_contact_ids`] and [`Self::with_topic_ids`].
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the contact IDs (1–1000 items per request).
+    #[inline]
+    pub fn with_contact_ids(mut self, contact_ids: Vec<String>) -> Self {
+        self.contact_ids = contact_ids;
+        self
+    }
+
+    /// Sets the topic IDs (1–50 items per request).
+    #[inline]
+    pub fn with_topic_ids(mut self, topic_ids: Vec<String>) -> Self {
+        self.topic_ids = topic_ids;
+        self
+    }
+}
+
 // ── Response Types ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -618,12 +943,88 @@ struct BulkCreateAudienceContactsResponseWrapper {
 }
 
 /// Response from the bulk contact creation endpoint.
+///
+/// A bulk create can **partially succeed**: rows that fail validation are
+/// skipped and reported in [`errors`](Self::errors) while the rest of the batch
+/// is written, and the call still returns HTTP 201. An `Ok` result therefore
+/// does **not** mean every row landed — check [`has_errors`](Self::has_errors).
+///
+/// [`already_existed`](Self::already_existed) and [`updated`](Self::updated)
+/// overlap by design. They answer different questions ("was the address already
+/// in the audience?" vs "did this request change the contact?"), so the counters
+/// do not sum to the row count: a contact that already existed and got attached
+/// to a list is counted in both.
 #[derive(Debug, Clone, Deserialize)]
 pub struct BulkCreateAudienceContactsResponse {
     /// Number of contacts newly created.
     pub created: u32,
     /// Number of emails skipped because they already existed.
     pub already_existed: u32,
+    /// Existing contacts this request changed — properties merged, a list or
+    /// topic attached, or a subscription dropped.
+    #[serde(default)]
+    pub updated: u32,
+    /// Number of skipped rows.
+    #[serde(default)]
+    pub error_count: u32,
+    /// The skipped rows.
+    #[serde(default)]
+    pub errors: Vec<BulkAudienceContactError>,
+    /// Every contact that exists after the request, in submission order.
+    #[serde(default)]
+    pub contacts: Vec<BulkAudienceContactRef>,
+}
+
+impl BulkCreateAudienceContactsResponse {
+    /// Whether any row was skipped. Always check this — a bulk create reports
+    /// partial failures in the body, not in the HTTP status.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+
+    /// The IDs of every contact that exists after the request, in submission
+    /// order — ready to feed into the bulk list and topic endpoints.
+    #[must_use]
+    pub fn contact_ids(&self) -> Vec<String> {
+        self.contacts.iter().map(|c| c.id.clone()).collect()
+    }
+
+    /// Looks up the ID for a submitted address. Matching is case-insensitive
+    /// because the API normalizes addresses before storing them.
+    #[must_use]
+    pub fn id_for(&self, email: &str) -> Option<&str> {
+        let needle = email.trim().to_lowercase();
+        self.contacts
+            .iter()
+            .find(|c| c.email.to_lowercase() == needle)
+            .map(|c| c.id.as_str())
+    }
+}
+
+/// A row that was skipped during a bulk create.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BulkAudienceContactError {
+    /// Zero-based position of the row in the submitted list.
+    pub index: u32,
+    /// The submitted address, when the row had one.
+    pub email: Option<String>,
+    /// Why the row was skipped.
+    pub error_code: BulkAudienceContactErrorCode,
+    /// Human-readable reason.
+    pub error: String,
+}
+
+/// Identity of a contact that exists after a bulk create, so the caller can
+/// chain into the bulk list and topic endpoints without looking IDs up again.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BulkAudienceContactRef {
+    /// Contact ID.
+    pub id: String,
+    /// Normalized email address.
+    pub email: String,
+    /// `true` when this request created the contact, `false` when it already existed.
+    pub created: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -659,6 +1060,43 @@ pub struct BulkDetachContactsFromListsResponse {
     /// Number of pairs that were not present.
     pub not_present: u32,
     /// Total number of (contact, list) pairs processed.
+    pub total_pairs: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct BulkSubscribeContactsToTopicsResponseWrapper {
+    #[allow(dead_code)]
+    message: String,
+    data: BulkSubscribeContactsToTopicsResponse,
+}
+
+/// Response from the bulk subscribe contacts-to-topics endpoint.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BulkSubscribeContactsToTopicsResponse {
+    /// Number of new (contact, topic) pairs subscribed.
+    pub subscribed: u32,
+    /// Number of pairs that were already subscribed.
+    pub already_subscribed: u32,
+    /// Total number of (contact, topic) pairs processed.
+    pub total_pairs: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct BulkUnsubscribeContactsFromTopicsResponseWrapper {
+    #[allow(dead_code)]
+    message: String,
+    data: BulkUnsubscribeContactsFromTopicsResponse,
+}
+
+/// Response from the bulk unsubscribe contacts-from-topics endpoint.
+///
+/// Pairs that did not exist are ignored, so `unsubscribed` can be lower than
+/// `total_pairs`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BulkUnsubscribeContactsFromTopicsResponse {
+    /// Number of (contact, topic) pairs unsubscribed.
+    pub unsubscribed: u32,
+    /// Total number of (contact, topic) pairs processed.
     pub total_pairs: u32,
 }
 
