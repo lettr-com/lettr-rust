@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-14
+
 Covers the reworked bulk contact import (TPL-2105) and the duplicate-create fix. Everything here is additive — code written against 1.3.0 keeps compiling and sends the exact same payloads.
 
 ### Added
@@ -164,7 +166,8 @@ Promotes the current API surface to a stable `1.0.0` release. No code changes si
 - `GET /health`, `GET /auth/check` — health and auth endpoints
 - `native-tls`, `rustls-tls`, `blocking` feature flags
 
-[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/lettr/lettr-rust/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/lettr/lettr-rust/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/lettr/lettr-rust/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/lettr/lettr-rust/compare/v1.0.0...v1.1.0
