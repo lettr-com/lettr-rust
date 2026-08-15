@@ -190,10 +190,10 @@ impl SegmentCondition {
     }
 }
 
-/// A group of conditions ANDed together within a segment.
+/// A group of conditions ORed together within a segment.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SegmentConditionGroup {
-    /// Conditions in this group (joined with AND on the server).
+    /// Conditions in this group (joined with OR on the server).
     pub conditions: Vec<SegmentCondition>,
 }
 
@@ -206,7 +206,7 @@ impl SegmentConditionGroup {
 
 /// Top-level conditions structure sent on create/update.
 ///
-/// Groups are ORed together; conditions within a group are ANDed.
+/// Groups are ANDed together; conditions within a group are ORed.
 #[derive(Debug, Clone, Serialize)]
 pub struct SegmentConditionsInput {
     /// Condition groups (ORed).
