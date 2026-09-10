@@ -12,6 +12,7 @@ pub(crate) mod config;
 pub mod domains;
 pub mod emails;
 pub mod error;
+pub mod folders;
 pub mod projects;
 pub mod templates;
 pub mod webhooks;

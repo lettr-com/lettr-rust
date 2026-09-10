@@ -5,6 +5,7 @@ use crate::campaigns::CampaignsSvc;
 use crate::config::Config;
 use crate::domains::DomainsSvc;
 use crate::emails::EmailsSvc;
+use crate::folders::FoldersSvc;
 use crate::projects::ProjectsSvc;
 use crate::templates::TemplatesSvc;
 use crate::webhooks::WebhooksSvc;
@@ -42,6 +43,9 @@ pub struct Lettr {
     pub templates: TemplatesSvc,
     /// Project listing.
     pub projects: ProjectsSvc,
+
+    /// Template folder listing — where a usable `folder_id` comes from.
+    pub folders: FoldersSvc,
     /// Audience management: lists, contacts, topics, properties, and segments.
     pub audience: AudienceSvc,
     /// Campaign listing, stats, engagement events, and dispatch/scheduling.
@@ -78,6 +82,7 @@ impl Lettr {
             webhooks: WebhooksSvc(Arc::clone(&config)),
             templates: TemplatesSvc(Arc::clone(&config)),
             projects: ProjectsSvc(Arc::clone(&config)),
+            folders: FoldersSvc(Arc::clone(&config)),
             audience: AudienceSvc::new(Arc::clone(&config)),
             campaigns: CampaignsSvc(Arc::clone(&config)),
             config,

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-10
+
+Brings this client level with lettr-php: template modules, the folders endpoint, preparation status, and idempotent sends. Everything is additive - code written against 1.4.1 keeps compiling and sends identical requests.
+
+### Added
+
+- **`client.folders.list()`** - the folders templates are filed into, each with its `purpose` and `templates_count`. This is what `CreateTemplateOptions::with_folder_id` was missing: nothing else returned a folder id, so a caller either omitted it and accepted whichever folder the API picked, or hardcoded an integer read out of an app URL. Read-only, because deleting a folder moves or deletes the templates inside it.
+- **`TemplatePurpose`** (`Transactional`, `Campaign`) on `CreateTemplateOptions::with_purpose`, on every template response, and as a `ListTemplatesOptions` filter.
+- **`TemplatePreparationStatus`** (`Pending`, `Ready`, `Failed`) on every template response, with `is_settled()`.
+
+  `is_settled()` rather than `is_ready()` on purpose: it answers "is what I sent what will go out", which is not the same question as "can I send this". After an *update* the previous render stays in place, so a pending template is still sendable - it is serving the old content.
+
+  Both fields default when the API omits them - `Transactional` and `Ready` - because on a deployment that predates them every template with HTML was simply usable. Defaulting to `Pending` would make an older API look like a stalled queue. Both enums carry an `Unknown(String)` variant, so a value added server-side deserializes rather than failing.
+- **`ListTemplatesOptions::folder_id`** - one `per_page(100)` call reconciles a whole bulk import instead of a detail call per template, each dragging the full HTML payload against the same rate limit. A folder outside the resolved project is a 404, not an empty list, so a typo cannot be misread as "nothing is there yet".
+- **`CreateEmailOptions::with_idempotency_key`** - reuse the key when you retry and the API returns the original result instead of delivering a second email. `SendEmailResponse::replayed` says when that happened.
+
+  The key lives on the options rather than as a `send` argument, so both `send` and `send_with_quota` pick it up and neither signature changed. It is `#[serde(skip)]`, so the request body is byte-identical to what you were already sending.
+
+  You choose the key; the SDK never generates one. It only works if both attempts use the same value, and the SDK does not retry - one `send` is one HTTP request - so the retry is yours. A malformed key returns `Error::Validation` **before any request goes out**; `is_valid_idempotency_key` is public for callers deriving keys from their own ids.
+- **`Error::is_idempotency_in_progress()`** and **`Error::is_idempotency_conflict()`**, because one is safe to retry and the other is not. The first should be retried with the *same* key after `Error::retry_after()` seconds; the second means that key was used with a different payload and will fail identically forever.
+- **`Error::retry_after()`** and `ApiError::retry_after` - the `Retry-After` header in seconds, when the API sent one.
+- Two new `ErrorCode` variants: `IdempotencyKeyConflict` and `IdempotencyInProgress`.
+
+### Notes
+
+- Keys are scoped per team **and** API key, so the same string through a different API key is a different key. The provider retains one for 24 hours.
+- `RawErrorResponse::into_error` now takes the parsed `Retry-After`. It is `pub(crate)`, so this is not a public API change.
+
 ## [1.4.1] - 2026-08-15
 
 ### Fixed

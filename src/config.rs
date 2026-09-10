@@ -97,10 +97,18 @@ impl Config {
         if status.is_success() {
             Ok(response)
         } else {
+            // Read before `text()` consumes the response.
+            let retry_after = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u32>().ok())
+                .filter(|seconds| *seconds > 0);
+
             let body = response.text().await.unwrap_or_default();
 
             match serde_json::from_str::<crate::error::RawErrorResponse>(&body) {
-                Ok(raw) => Err(raw.into_error()),
+                Ok(raw) => Err(raw.into_error(retry_after)),
                 Err(_) => Err(crate::Error::Parse(format!("HTTP {status}: {body}"))),
             }
         }

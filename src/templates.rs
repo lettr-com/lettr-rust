@@ -42,6 +42,12 @@ impl TemplatesSvc {
         if let Some(project_id) = options.project_id {
             request = request.query(&[("project_id", project_id.to_string())]);
         }
+        if let Some(folder_id) = options.folder_id {
+            request = request.query(&[("folder_id", folder_id.to_string())]);
+        }
+        if let Some(ref purpose) = options.purpose {
+            request = request.query(&[("purpose", purpose.as_str())]);
+        }
         if let Some(per_page) = options.per_page {
             request = request.query(&[("per_page", per_page.to_string())]);
         }
@@ -251,6 +257,8 @@ impl TemplatesSvc {
 #[derive(Debug, Default, Clone)]
 pub struct ListTemplatesOptions {
     project_id: Option<u64>,
+    folder_id: Option<u64>,
+    purpose: Option<TemplatePurpose>,
     per_page: Option<u32>,
     page: Option<u32>,
 }
@@ -265,6 +273,28 @@ impl ListTemplatesOptions {
     #[inline]
     pub fn project_id(mut self, project_id: u64) -> Self {
         self.project_id = Some(project_id);
+        self
+    }
+
+    /// Narrows the list to one folder of the resolved project.
+    ///
+    /// Discover ids with [`FoldersSvc::list`](crate::folders::FoldersSvc::list).
+    /// One `per_page(100)` call reconciles a whole bulk import instead of a
+    /// detail call per template, each of which drags the full HTML payload
+    /// against the same rate limit.
+    ///
+    /// A folder that is not in the resolved project is a 404, not an empty
+    /// list, so a typo cannot be misread as "nothing is there yet".
+    #[inline]
+    pub fn folder_id(mut self, folder_id: u64) -> Self {
+        self.folder_id = Some(folder_id);
+        self
+    }
+
+    /// Narrows the list to one module. Both are returned if not set.
+    #[inline]
+    pub fn purpose(mut self, purpose: TemplatePurpose) -> Self {
+        self.purpose = Some(purpose);
         self
     }
 
@@ -302,9 +332,16 @@ pub struct CreateTemplateOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     project_id: Option<u64>,
 
-    /// Folder ID within the project.
+    /// Folder ID within the project. Must belong to the same module as
+    /// `purpose`. Discover ids with
+    /// [`FoldersSvc::list`](crate::folders::FoldersSvc::list).
     #[serde(skip_serializing_if = "Option::is_none")]
     folder_id: Option<u64>,
+
+    /// The module to create the template in. Omit to let the API decide,
+    /// which today means transactional.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    purpose: Option<TemplatePurpose>,
 }
 
 impl CreateTemplateOptions {
@@ -316,6 +353,7 @@ impl CreateTemplateOptions {
             json: None,
             project_id: None,
             folder_id: None,
+            purpose: None,
         }
     }
 
@@ -344,6 +382,13 @@ impl CreateTemplateOptions {
     #[inline]
     pub fn with_folder_id(mut self, folder_id: u64) -> Self {
         self.folder_id = Some(folder_id);
+        self
+    }
+
+    /// Sets the module to create the template in.
+    #[inline]
+    pub fn with_purpose(mut self, purpose: TemplatePurpose) -> Self {
+        self.purpose = Some(purpose);
         self
     }
 }
@@ -435,10 +480,104 @@ pub struct Template {
     pub project_id: u64,
     /// Folder ID this template belongs to.
     pub folder_id: u64,
+    /// The module this template belongs to.
+    #[serde(default = "default_purpose")]
+    pub purpose: TemplatePurpose,
+    /// How far this template has got through preparation.
+    #[serde(default = "default_preparation_status")]
+    pub preparation_status: TemplatePreparationStatus,
     /// Creation timestamp.
     pub created_at: String,
     /// Last update timestamp.
     pub updated_at: String,
+}
+
+/// The module a template belongs to.
+///
+/// The two do not mix: only [`Campaign`](Self::Campaign) templates can be
+/// picked by the campaign builder, and only [`Transactional`](Self::Transactional)
+/// ones can be sent as single emails.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TemplatePurpose {
+    Transactional,
+    Campaign,
+    /// An unknown purpose not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl TemplatePurpose {
+    /// The wire value, for query parameters.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Transactional => "transactional",
+            Self::Campaign => "campaign",
+            Self::Unknown(s) => s,
+        }
+    }
+}
+
+impl std::fmt::Display for TemplatePurpose {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// The purpose an API that predates the field implied: there was no other kind.
+pub(crate) fn default_purpose() -> TemplatePurpose {
+    TemplatePurpose::Transactional
+}
+
+/// How far a template has got through preparation.
+///
+/// Creating or updating a template through the API defers image migration and
+/// HTML rendering to a background job. On a create with JSON there is no HTML
+/// at all until it finishes; on an **update** the previous render stays in
+/// place, so the template is still sendable but is serving the *old* content.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TemplatePreparationStatus {
+    Pending,
+    Ready,
+    Failed,
+    /// An unknown status not yet covered by this enum.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl TemplatePreparationStatus {
+    /// Whether the content you last sent is the content that will go out.
+    ///
+    /// Deliberately not named `is_ready`: this is not the same question as
+    /// "can I send this". A template being prepared after an update keeps its
+    /// previous render and stays sendable, so wiring this into a send guard
+    /// would block legitimate sends.
+    #[must_use]
+    pub fn is_settled(&self) -> bool {
+        matches!(self, Self::Ready)
+    }
+}
+
+impl std::fmt::Display for TemplatePreparationStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pending => write!(f, "pending"),
+            Self::Ready => write!(f, "ready"),
+            Self::Failed => write!(f, "failed"),
+            Self::Unknown(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// What an API that predates the field implied: every template with HTML was
+/// simply usable, so `Ready` is the honest default. `Pending` would look like a
+/// stalled queue and hang anything waiting for readiness.
+fn default_preparation_status() -> TemplatePreparationStatus {
+    TemplatePreparationStatus::Ready
 }
 
 /// Pagination metadata for template list responses.
@@ -474,6 +613,12 @@ pub struct CreateTemplateResponse {
     pub project_id: u64,
     /// Folder ID.
     pub folder_id: u64,
+    /// The module this template belongs to.
+    #[serde(default = "default_purpose")]
+    pub purpose: TemplatePurpose,
+    /// How far this template has got through preparation.
+    #[serde(default = "default_preparation_status")]
+    pub preparation_status: TemplatePreparationStatus,
     /// Active version number.
     pub active_version: u32,
     /// Extracted merge tags.
@@ -503,6 +648,12 @@ pub struct TemplateDetail {
     pub project_id: u64,
     /// Folder ID.
     pub folder_id: u64,
+    /// The module this template belongs to.
+    #[serde(default = "default_purpose")]
+    pub purpose: TemplatePurpose,
+    /// How far this template has got through preparation.
+    #[serde(default = "default_preparation_status")]
+    pub preparation_status: TemplatePreparationStatus,
     /// Active version number.
     pub active_version: Option<u32>,
     /// Total number of versions.
@@ -539,6 +690,12 @@ pub struct UpdateTemplateResponse {
     pub project_id: u64,
     /// Folder ID.
     pub folder_id: u64,
+    /// The module this template belongs to.
+    #[serde(default = "default_purpose")]
+    pub purpose: TemplatePurpose,
+    /// How far this template has got through preparation.
+    #[serde(default = "default_preparation_status")]
+    pub preparation_status: TemplatePreparationStatus,
     /// Active version number.
     pub active_version: u32,
     /// Extracted merge tags.
