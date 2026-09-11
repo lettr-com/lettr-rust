@@ -69,7 +69,7 @@ pub enum AudienceTopicSubscriptionState {
 /// Reason a single row was skipped during a bulk contact create.
 ///
 /// These are per-row codes reported inside a `201` body — not the top-level
-/// [`ErrorCode`](crate::ErrorCode) of a failed request.
+/// [`ErrorCode`](crate::error::ErrorCode) of a failed request.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -166,7 +166,7 @@ impl AudienceContactsSvc {
     /// condition, not an outage: **do not retry it.** Use [`update`] instead,
     /// or [`bulk_create`] with `with_update_existing(true)`.
     ///
-    /// [`ErrorCode::ResourceAlreadyExists`]: crate::ErrorCode::ResourceAlreadyExists
+    /// [`ErrorCode::ResourceAlreadyExists`]: crate::error::ErrorCode::ResourceAlreadyExists
     /// [`Error::is_contact_already_exists`]: crate::Error::is_contact_already_exists
     /// [`update`]: Self::update
     /// [`bulk_create`]: Self::bulk_create
