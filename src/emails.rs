@@ -143,10 +143,23 @@ impl EmailsSvc {
     /// ```
     #[maybe_async::maybe_async]
     pub async fn send(&self, email: CreateEmailOptions) -> crate::Result<SendEmailResponse> {
-        let request = self.0.build(Method::POST, "/emails").json(&email);
+        // Checked here so a malformed key fails locally instead of costing a
+        // round trip and a 422.
+        let key = email.idempotency_key_header()?;
+
+        let mut request = self.0.build(Method::POST, "/emails").json(&email);
+        if let Some(ref key) = key {
+            request = request.header("Idempotency-Key", key);
+        }
+
         let response = self.0.send(request).await?;
+        let replayed = replayed_from_headers(response.headers());
         let wrapper = response.json::<SendEmailResponseWrapper>().await?;
-        Ok(wrapper.data)
+
+        Ok(SendEmailResponse {
+            replayed,
+            ..wrapper.data
+        })
     }
 
     /// Send a transactional email and return quota information.
@@ -178,12 +191,23 @@ impl EmailsSvc {
         &self,
         email: CreateEmailOptions,
     ) -> crate::Result<SendEmailWithQuotaResponse> {
-        let request = self.0.build(Method::POST, "/emails").json(&email);
+        let key = email.idempotency_key_header()?;
+
+        let mut request = self.0.build(Method::POST, "/emails").json(&email);
+        if let Some(ref key) = key {
+            request = request.header("Idempotency-Key", key);
+        }
+
         let response = self.0.send(request).await?;
         let quota = QuotaInfo::from_headers(response.headers());
+        let replayed = replayed_from_headers(response.headers());
         let wrapper = response.json::<SendEmailResponseWrapper>().await?;
+
         Ok(SendEmailWithQuotaResponse {
-            response: wrapper.data,
+            response: SendEmailResponse {
+                replayed,
+                ..wrapper.data
+            },
             quota,
         })
     }
@@ -466,6 +490,13 @@ impl EmailsSvc {
 #[must_use]
 #[derive(Debug, Clone, Serialize)]
 pub struct CreateEmailOptions {
+    /// A key identifying one logical send.
+    ///
+    /// Travels as the `Idempotency-Key` header, not in the body, which is why
+    /// it is skipped during serialization.
+    #[serde(skip)]
+    idempotency_key: Option<String>,
+
     /// Sender email address.
     from: String,
 
@@ -545,6 +576,29 @@ pub struct CreateEmailOptions {
     attachments: Option<Vec<Attachment>>,
 }
 
+/// Whether a string is a usable idempotency key.
+///
+/// The format the API accepts is 1-255 characters of letters, digits, periods,
+/// underscores or hyphens. Exported so callers deriving keys from their own ids
+/// — an order number, a job id — can check before sending rather than
+/// discovering it as a 422.
+#[must_use]
+pub fn is_valid_idempotency_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= 255
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
+/// Whether the response replayed an earlier send under the same key.
+fn replayed_from_headers(headers: &reqwest::header::HeaderMap) -> bool {
+    headers
+        .get("Idempotency-Replayed")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.eq_ignore_ascii_case("true"))
+}
+
 impl CreateEmailOptions {
     /// Creates a new [`CreateEmailOptions`] with a subject.
     ///
@@ -567,6 +621,7 @@ impl CreateEmailOptions {
         A: Into<String>,
     {
         Self {
+            idempotency_key: None,
             from: from.into(),
             from_name: None,
             subject: Some(subject.into()),
@@ -614,6 +669,7 @@ impl CreateEmailOptions {
         A: Into<String>,
     {
         Self {
+            idempotency_key: None,
             from: from.into(),
             from_name: None,
             subject: None,
@@ -634,6 +690,46 @@ impl CreateEmailOptions {
             substitution_data: None,
             options: None,
             attachments: None,
+        }
+    }
+
+    /// Sends this email under an idempotency key.
+    ///
+    /// Reuse the key when you retry and the API returns the original result
+    /// instead of delivering a second email;
+    /// [`SendEmailResponse::replayed`] says when that happened.
+    ///
+    /// **You choose the key; the SDK never generates one.** It only works if
+    /// both attempts use the same value, and the SDK does not retry — one
+    /// `send` is one HTTP request — so the retry is yours, and only you know
+    /// that two calls are the same logical send. A key generated inside `send`
+    /// would differ on every attempt and protect nothing while looking like it
+    /// did.
+    ///
+    /// The key must be 1-255 characters of `[A-Za-z0-9._-]`; `send` returns a
+    /// validation error before making a request if it is not.
+    #[inline]
+    pub fn with_idempotency_key(mut self, key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(key.into());
+        self
+    }
+
+    /// The key to send, validated, or `None` when there is none.
+    pub(crate) fn idempotency_key_header(&self) -> crate::Result<Option<String>> {
+        match self.idempotency_key {
+            None => Ok(None),
+            Some(ref key) if is_valid_idempotency_key(key) => Ok(Some(key.clone())),
+            Some(_) => Err(crate::Error::Validation(crate::error::ValidationError {
+                message: "Validation failed.".to_string(),
+                error_code: Some(crate::error::ErrorCode::ValidationError),
+                errors: std::collections::HashMap::from([(
+                    "Idempotency-Key".to_string(),
+                    vec![
+                        "Use 1 to 255 letters, digits, periods, underscores or hyphens."
+                            .to_string(),
+                    ],
+                )]),
+            })),
         }
     }
 
@@ -1065,6 +1161,17 @@ pub struct SendEmailResponse {
     pub accepted: u32,
     /// Number of rejected recipients.
     pub rejected: u32,
+    /// Whether this response replayed an earlier send under the same
+    /// idempotency key — no second email went out.
+    ///
+    /// A replay is a **success**, not an error: the API hands back the original
+    /// transmission. Always `false` for a send made without a key, since there
+    /// is nothing to replay.
+    ///
+    /// Read from the `Idempotency-Replayed` response header rather than the
+    /// body, so it is skipped during deserialization.
+    #[serde(skip)]
+    pub replayed: bool,
 }
 
 /// Successful response from sending an email, including quota information.

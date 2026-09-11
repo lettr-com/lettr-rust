@@ -19,6 +19,8 @@ pub enum ErrorCode {
     DailyQuotaExceeded,
     InsufficientScope,
     ScheduleCancellationFailed,
+    IdempotencyKeyConflict,
+    IdempotencyInProgress,
     /// An unknown error code not yet covered by this enum.
     #[serde(untagged)]
     Unknown(String),
@@ -40,6 +42,8 @@ impl fmt::Display for ErrorCode {
             Self::DailyQuotaExceeded => write!(f, "daily_quota_exceeded"),
             Self::InsufficientScope => write!(f, "insufficient_scope"),
             Self::ScheduleCancellationFailed => write!(f, "schedule_cancellation_failed"),
+            Self::IdempotencyKeyConflict => write!(f, "idempotency_key_conflict"),
+            Self::IdempotencyInProgress => write!(f, "idempotency_in_progress"),
             Self::Unknown(s) => write!(f, "{s}"),
         }
     }
@@ -113,6 +117,62 @@ impl Error {
     pub fn is_contact_already_exists(&self) -> bool {
         matches!(self.error_code(), Some(ErrorCode::ResourceAlreadyExists))
     }
+
+    /// Whether this is the "key already used with a different payload" conflict
+    /// (HTTP 409, `idempotency_key_conflict`).
+    ///
+    /// **Never retry this.** Two different emails were sent under one key,
+    /// which is a bug on the caller's side; the same request will fail
+    /// identically forever. Use a key that is unique per logical send, or send
+    /// the payload the key was first used with.
+    ///
+    /// Keys are scoped per team **and** API key, so the same string sent
+    /// through a different API key is a different key and will not collide.
+    #[must_use]
+    pub fn is_idempotency_conflict(&self) -> bool {
+        matches!(self.error_code(), Some(ErrorCode::IdempotencyKeyConflict))
+    }
+
+    /// Whether the original send for this key is still processing (HTTP 409,
+    /// `idempotency_in_progress`).
+    ///
+    /// Unlike [`is_idempotency_conflict`](Self::is_idempotency_conflict) this
+    /// one **is** retryable, and must be retried with the *same* key — a fresh
+    /// key would send a second email. Wait [`retry_after`](Self::retry_after)
+    /// seconds first.
+    ///
+    /// ```rust,no_run
+    /// # use lettr::{Lettr, CreateEmailOptions};
+    /// # async fn run() -> lettr::Result<()> {
+    /// # let client = Lettr::new("your-api-key");
+    /// # let email = CreateEmailOptions::new("a@example.com", ["b@example.com"], "Hello")
+    ///     .with_idempotency_key("order-12345");
+    /// match client.emails.send(email).await {
+    ///     Ok(response) => println!("replayed: {}", response.replayed),
+    ///     Err(e) if e.is_idempotency_in_progress() => {
+    ///         // Wait e.retry_after() seconds, then retry with the SAME key.
+    ///     }
+    ///     Err(e) => return Err(e),
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn is_idempotency_in_progress(&self) -> bool {
+        matches!(self.error_code(), Some(ErrorCode::IdempotencyInProgress))
+    }
+
+    /// Seconds to wait before retrying, from the `Retry-After` header.
+    ///
+    /// Present on the retryable failures — an in-progress idempotent send, a
+    /// rate limit — and absent on the ones that will never succeed.
+    #[must_use]
+    pub fn retry_after(&self) -> Option<u32> {
+        match self {
+            Self::Api(e) => e.retry_after,
+            _ => None,
+        }
+    }
 }
 
 /// An error response from the Lettr API.
@@ -123,6 +183,12 @@ pub struct ApiError {
     /// Machine-readable error code.
     #[serde(default)]
     pub error_code: Option<ErrorCode>,
+    /// Seconds to wait before retrying, from the `Retry-After` header.
+    ///
+    /// Not part of the response body — filled in from the header, so it is
+    /// skipped during deserialization.
+    #[serde(skip)]
+    pub retry_after: Option<u32>,
 }
 
 impl fmt::Display for ApiError {
@@ -176,7 +242,10 @@ pub(crate) struct RawErrorResponse {
 
 impl RawErrorResponse {
     /// Convert into the appropriate [`Error`] variant.
-    pub fn into_error(self) -> Error {
+    ///
+    /// `retry_after` comes from the response header rather than the body, and
+    /// is what separates the retryable failures from the permanent ones.
+    pub fn into_error(self, retry_after: Option<u32>) -> Error {
         if let Some(errors) = self.errors {
             Error::Validation(ValidationError {
                 message: self.message,
@@ -187,6 +256,7 @@ impl RawErrorResponse {
             Error::Api(ApiError {
                 message: self.message,
                 error_code: self.error_code,
+                retry_after,
             })
         }
     }
