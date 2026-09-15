@@ -1,6 +1,6 @@
 [package]
 name = "lettr"
-version = "1.5.0"
+version = "1.6.0"
 edition = "2021"
 rust-version = "1.85"
 
@@ -8,7 +8,7 @@ license = "MIT"
 readme = "README.md"
 
 authors = ["Lettr <support@lettr.com>"]
-repository = "https://github.com/lettr/lettr-rust"
+repository = "https://github.com/lettr-com/lettr-rust"
 homepage = "https://lettr.com"
 documentation = "https://docs.rs/lettr"
 

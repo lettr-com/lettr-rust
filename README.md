@@ -4,7 +4,7 @@ Official Rust SDK for the [Lettr](https://lettr.com) Email API. An async, typed 
 
 [![Crates.io](https://img.shields.io/crates/v/lettr.svg)](https://crates.io/crates/lettr)
 [![Documentation](https://docs.rs/lettr/badge.svg)](https://docs.rs/lettr)
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/lettr/lettr-rust/blob/main/LICENSE)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/lettr-com/lettr-rust/blob/main/LICENSE)
 
 ## Installation
 
@@ -12,7 +12,7 @@ Add `lettr` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lettr = "1.5"
+lettr = "1.6"
 ```
 
 Or with the Cargo CLI:

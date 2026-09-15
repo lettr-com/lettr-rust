@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-15
+
+Requests now time out instead of hanging, and `rust-version` states the toolchain the crate actually needs. No public API changed: code written against 1.5.0 compiles unchanged. Two things to check when upgrading: a call that takes longer than 30 seconds now returns an error, and the declared minimum Rust is 1.85.
+
 ### Changed
 
 - **Minimum supported Rust version is now 1.85.** `Cargo.toml` declared 1.70, but the crate had not built on 1.70 for a while: dependencies like `indexmap` 2.14 (pulled in through `reqwest`) use the 2024 edition, which Cargo only supports from 1.85. 1.84 fails and 1.85 passes, with all features, the default features, and `rustls-tls,blocking`. This corrects the manifest; no toolchain that worked before stops working. A new CI job builds on 1.85, so a dependency update that raises the floor fails in CI.
@@ -210,13 +214,16 @@ Promotes the current API surface to a stable `1.0.0` release. No code changes si
 - `GET /health`, `GET /auth/check` — health and auth endpoints
 - `native-tls`, `rustls-tls`, `blocking` feature flags
 
-[Unreleased]: https://github.com/lettr/lettr-rust/compare/v1.4.1...HEAD
-[1.4.1]: https://github.com/lettr/lettr-rust/compare/v1.4.0...v1.4.1
-[1.4.0]: https://github.com/lettr/lettr-rust/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/lettr/lettr-rust/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/lettr/lettr-rust/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/lettr/lettr-rust/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/lettr/lettr-rust/compare/v0.3.0...v1.0.0
-[0.3.0]: https://github.com/lettr/lettr-rust/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/lettr/lettr-rust/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/lettr/lettr-rust/releases/tag/v0.1.0
+[Unreleased]: https://github.com/lettr-com/lettr-rust/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/lettr-com/lettr-rust/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/lettr-com/lettr-rust/compare/1.4.1...v1.5.0
+[1.4.1]: https://github.com/lettr-com/lettr-rust/compare/1.4.0...1.4.1
+[1.4.0]: https://github.com/lettr-com/lettr-rust/compare/1.3.0...1.4.0
+[1.3.0]: https://github.com/lettr-com/lettr-rust/compare/v1.2.0...1.3.0
+[1.2.0]: https://github.com/lettr-com/lettr-rust/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/lettr-com/lettr-rust/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/lettr-com/lettr-rust/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/lettr-com/lettr-rust/compare/v0.3.0...v1.0.0
+[0.3.0]: https://github.com/lettr-com/lettr-rust/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/lettr-com/lettr-rust/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/lettr-com/lettr-rust/releases/tag/v0.1.0
