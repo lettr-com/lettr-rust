@@ -116,3 +116,27 @@ async fn validation_error_handling() {
         other => panic!("Expected Validation error, got: {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn request_times_out_after_30_seconds() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/health"))
+        .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(45)))
+        .mount(&server)
+        .await;
+
+    let client = client(&server);
+    let started = std::time::Instant::now();
+    let err = client.health().await.unwrap_err();
+
+    match err {
+        lettr::Error::Http(http_err) => {
+            assert!(http_err.is_timeout(), "Expected timeout, got: {http_err}")
+        }
+        other => panic!("Expected Http timeout error, got: {other:?}"),
+    }
+    assert!(started.elapsed() >= std::time::Duration::from_secs(29));
+    assert!(started.elapsed() < std::time::Duration::from_secs(45));
+}

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Requests now time out after 30 seconds.** The async client had no timeout at all, so a stalled connection or an unresponsive server hung the call forever. Every request - async and `blocking` - now has a 30-second total deadline and fails with `Error::Http`, where `is_timeout()` is true. This matches lettr-go, lettr-python, lettr-php and lettr-java.
+
+  The timeout is not configurable. A call that legitimately runs longer than 30 seconds now fails where it used to wait. `blocking` users see no change, because `reqwest::blocking` already defaulted to 30 seconds.
+
 ## [1.5.0] - 2026-09-10
 
 Brings this client level with lettr-php: template modules, the folders endpoint, preparation status, and idempotent sends. Everything is additive - code written against 1.4.1 keeps compiling and sends identical requests.
