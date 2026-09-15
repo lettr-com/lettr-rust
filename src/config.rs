@@ -1,7 +1,14 @@
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use reqwest::Method;
+use std::time::Duration;
 
 const BASE_URL: &str = "https://app.lettr.com/api";
+
+/// Total deadline for a request, from connecting until the response body is read.
+///
+/// The async `reqwest` client has no timeout by default, so without this a stalled
+/// connection would hang forever. Matches the other Lettr SDKs.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
 // Use the correct reqwest types based on blocking feature.
 #[cfg(feature = "blocking")]
@@ -48,6 +55,7 @@ impl Config {
 
         let http = HttpClient::builder()
             .default_headers(headers)
+            .timeout(DEFAULT_TIMEOUT)
             .build()
             .expect("Failed to build HTTP client");
 

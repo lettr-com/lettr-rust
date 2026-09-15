@@ -57,6 +57,8 @@ pub struct Lettr {
 impl Lettr {
     /// Creates a new [`Lettr`] client with the given API key.
     ///
+    /// Requests time out after 30 seconds and return [`Error::Http`](crate::Error::Http).
+    ///
     /// # Panics
     ///
     /// Panics if the API key contains non-ASCII characters.
