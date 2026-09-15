@@ -54,6 +54,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test
 
+  # `blocking` strips async/await from the whole client at compile time, so the
+  # async suite can't run against it. tests/blocking_test.rs drives every service
+  # through the sync client instead. `--tests` skips the doctests, which are
+  # written for the default async client and don't compile under `blocking`.
+  test-blocking:
+    name: Test (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --features blocking --tests
+
   # The TLS backend is a user-facing choice, and picking rustls drops
   # default-features. Nothing else in CI compiles that combination.
   tls-backends:
