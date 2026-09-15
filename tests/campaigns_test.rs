@@ -1,3 +1,7 @@
+// Async-only: under `blocking` the client methods are synchronous. The blocking
+// client is covered by tests/blocking_test.rs.
+#![cfg(not(feature = "blocking"))]
+
 use lettr::campaigns::{
     CampaignEventType, CampaignStatus, ListCampaignEventsOptions, ListCampaignsOptions,
     ScheduleCampaignOptions,
