@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Minimum supported Rust version is now 1.85.** `Cargo.toml` declared 1.70, but the crate had not built on 1.70 for a while: dependencies like `indexmap` 2.14 (pulled in through `reqwest`) use the 2024 edition, which Cargo only supports from 1.85. 1.84 fails and 1.85 passes, with all features, the default features, and `rustls-tls,blocking`. This corrects the manifest; no toolchain that worked before stops working. A new CI job builds on 1.85, so a dependency update that raises the floor fails in CI.
+
 ### Fixed
 
 - **Requests now time out after 30 seconds.** The async client had no timeout at all, so a stalled connection or an unresponsive server hung the call forever. Every request - async and `blocking` - now has a 30-second total deadline and fails with `Error::Http`, where `is_timeout()` is true. This matches lettr-go, lettr-python, lettr-php and lettr-java.
