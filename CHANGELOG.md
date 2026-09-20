@@ -7,23 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.6.0] - 2026-09-15
-
-Requests now time out instead of hanging, and `rust-version` states the toolchain the crate actually needs. No public API changed: code written against 1.5.0 compiles unchanged. Two things to check when upgrading: a call that takes longer than 30 seconds now returns an error, and the declared minimum Rust is 1.85.
-
-### Changed
-
-- **Minimum supported Rust version is now 1.85.** `Cargo.toml` declared 1.70, but the crate had not built on 1.70 for a while: dependencies like `indexmap` 2.14 (pulled in through `reqwest`) use the 2024 edition, which Cargo only supports from 1.85. 1.84 fails and 1.85 passes, with all features, the default features, and `rustls-tls,blocking`. This corrects the manifest; no toolchain that worked before stops working. A new CI job builds on 1.85, so a dependency update that raises the floor fails in CI.
-
 ### Fixed
 
 - **`get_scheduled()` failed for every scheduled email that had not been sent yet.** The API now returns `transmission_id: null` until the email is actually handed to the sending provider, and `ScheduledTransmission.transmission_id` was a `String`, so serde rejected the response outright - the call returned `Err` rather than the email. The field is now `Option<String>`.
 
   The same response also carries states this client did not know: `sending`, `sent` and `cancelled`. Those deserialized into `ScheduledEmailState::Other(_)` rather than failing, so they did not error, but no named variant matched them.
 
-- **Requests now time out after 30 seconds.** The async client had no timeout at all, so a stalled connection or an unresponsive server hung the call forever. Every request - async and `blocking` - now has a 30-second total deadline and fails with `Error::Http`, where `is_timeout()` is true. This matches lettr-go, lettr-python, lettr-php and lettr-java.
-
-  The timeout is not configurable. A call that legitimately runs longer than 30 seconds now fails where it used to wait. `blocking` users see no change, because `reqwest::blocking` already defaulted to 30 seconds.
+  Reading back a *legacy* provider transmission id still works. The API answers those from delivery events, in the older shape that has no `sch_` id, and `request_id` then carries the transmission id - so it is always the id that addresses the email you asked about.
 
 ### Added
 
@@ -38,6 +28,20 @@ Requests now time out instead of hanging, and `rust-version` states the toolchai
 
   **The id `schedule()` gives you changed meaning.** `request_id` is Lettr's own id, prefixed `sch_`, and it is what `get_scheduled()` and `cancel_scheduled()` take. The provider's id is the separate `transmission_id`, which is `None` until the email is sent - and it is the value that appears on **webhook events**. Code that stored the id from `schedule()` to correlate webhooks needs `transmission_id` from a later read.
 - **The scheduling window is 5 minutes to 30 days**, up from 3 days. This client never validated it, so longer schedules simply work.
+
+## [1.6.0] - 2026-09-15
+
+Requests now time out instead of hanging, and `rust-version` states the toolchain the crate actually needs. No public API changed: code written against 1.5.0 compiles unchanged. Two things to check when upgrading: a call that takes longer than 30 seconds now returns an error, and the declared minimum Rust is 1.85.
+
+### Changed
+
+- **Minimum supported Rust version is now 1.85.** `Cargo.toml` declared 1.70, but the crate had not built on 1.70 for a while: dependencies like `indexmap` 2.14 (pulled in through `reqwest`) use the 2024 edition, which Cargo only supports from 1.85. 1.84 fails and 1.85 passes, with all features, the default features, and `rustls-tls,blocking`. This corrects the manifest; no toolchain that worked before stops working. A new CI job builds on 1.85, so a dependency update that raises the floor fails in CI.
+
+### Fixed
+
+- **Requests now time out after 30 seconds.** The async client had no timeout at all, so a stalled connection or an unresponsive server hung the call forever. Every request - async and `blocking` - now has a 30-second total deadline and fails with `Error::Http`, where `is_timeout()` is true. This matches lettr-go, lettr-python, lettr-php and lettr-java.
+
+  The timeout is not configurable. A call that legitimately runs longer than 30 seconds now fails where it used to wait. `blocking` users see no change, because `reqwest::blocking` already defaulted to 30 seconds.
 
 ## [1.5.0] - 2026-09-10
 

@@ -653,3 +653,47 @@ fn schedule_email_serialization() {
     assert_eq!(json["scheduled_at"], "2024-01-16T10:00:00Z");
     assert_eq!(json["html"], "<p>Later</p>");
 }
+
+#[tokio::test]
+async fn get_scheduled_accepts_a_legacy_transmission_id() {
+    // A transmission id handed out before Lettr held scheduled emails itself
+    // is answered from delivery events, in the older shape: no `request_id`,
+    // no accepted/rejected/tag, and the provider's states. It must still parse.
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/emails/scheduled/7686140844331501179"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "message": "Scheduled transmission retrieved successfully.",
+            "data": {
+                "transmission_id": "7686140844331501179",
+                "state": "delivered",
+                "scheduled_at": "2026-09-16T15:00:00+00:00",
+                "from": "sender@example.com",
+                "from_name": "Sender Name",
+                "subject": "Scheduled Newsletter",
+                "recipients": ["recipient@example.com"],
+                "num_recipients": 1,
+                "events": []
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let client = client(&server);
+    let email = client
+        .emails
+        .get_scheduled("7686140844331501179")
+        .await
+        .unwrap();
+
+    assert_eq!(email.state, lettr::emails::ScheduledEmailState::Delivered);
+    assert_eq!(
+        email.transmission_id.as_deref(),
+        Some("7686140844331501179")
+    );
+    // No sch_ id in this shape, so request_id falls back to the id used to ask.
+    assert_eq!(email.request_id, "7686140844331501179");
+    assert_eq!(email.accepted, 0);
+    assert_eq!(email.tag, None);
+}

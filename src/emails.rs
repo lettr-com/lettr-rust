@@ -412,7 +412,7 @@ impl EmailsSvc {
             .json(&options);
         let response = self.0.send(request).await?;
         let wrapper = response.json::<ScheduledEmailResponseWrapper>().await?;
-        Ok(wrapper.data)
+        Ok(wrapper.data.with_fallback_request_id())
     }
 
     /// Schedule an email and return quota information.
@@ -453,7 +453,7 @@ impl EmailsSvc {
         let quota = QuotaInfo::from_headers(response.headers());
         let wrapper = response.json::<ScheduledEmailResponseWrapper>().await?;
         Ok(ScheduledEmailWithQuota {
-            response: wrapper.data,
+            response: wrapper.data.with_fallback_request_id(),
             quota,
         })
     }
@@ -527,7 +527,7 @@ impl EmailsSvc {
         let request = self.0.build(Method::GET, &path);
         let response = self.0.send(request).await?;
         let wrapper = response.json::<ScheduledEmailResponseWrapper>().await?;
-        Ok(wrapper.data)
+        Ok(wrapper.data.with_fallback_request_id())
     }
 
     /// Cancel a scheduled email.
@@ -550,7 +550,7 @@ impl EmailsSvc {
         let request = self.0.build(Method::DELETE, &path);
         let response = self.0.send(request).await?;
         let wrapper = response.json::<ScheduledEmailResponseWrapper>().await?;
-        Ok(wrapper.data)
+        Ok(wrapper.data.with_fallback_request_id())
     }
 }
 
@@ -1722,6 +1722,12 @@ struct ScheduledEmailResponseWrapper {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScheduledEmail {
     /// Lettr's own id for the scheduled email (`sch_...`).
+    ///
+    /// Reading back a *legacy* provider transmission id - one handed out
+    /// before Lettr held scheduled emails itself - answers from delivery
+    /// events instead, and that response has no `sch_` id. This then carries
+    /// the transmission id, so it is always the id that addresses this email.
+    #[serde(default)]
     pub request_id: String,
     /// The sending provider's id. `None` until the email is sent.
     #[serde(default)]
@@ -1763,6 +1769,17 @@ pub struct ScheduledEmail {
 }
 
 impl ScheduledEmail {
+    /// A legacy response has no `request_id`; the id the caller addressed it
+    /// with is the transmission id, so use that.
+    fn with_fallback_request_id(mut self) -> Self {
+        if self.request_id.is_empty() {
+            if let Some(ref transmission_id) = self.transmission_id {
+                self.request_id = transmission_id.clone();
+            }
+        }
+        self
+    }
+
     /// Whether the email can still be cancelled.
     #[must_use]
     pub fn is_cancellable(&self) -> bool {
@@ -1792,7 +1809,7 @@ pub struct ScheduledEmailWithQuota {
 }
 
 /// Former name of [`ScheduledEmail`].
-#[deprecated(since = "1.6.0", note = "renamed to ScheduledEmail")]
+#[deprecated(since = "1.7.0", note = "renamed to ScheduledEmail")]
 pub type ScheduledTransmission = ScheduledEmail;
 
 /// Options for listing scheduled emails.
