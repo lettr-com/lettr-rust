@@ -17,9 +17,27 @@ Requests now time out instead of hanging, and `rust-version` states the toolchai
 
 ### Fixed
 
+- **`get_scheduled()` failed for every scheduled email that had not been sent yet.** The API now returns `transmission_id: null` until the email is actually handed to the sending provider, and `ScheduledTransmission.transmission_id` was a `String`, so serde rejected the response outright - the call returned `Err` rather than the email. The field is now `Option<String>`.
+
+  The same response also carries states this client did not know: `sending`, `sent` and `cancelled`. Those deserialized into `ScheduledEmailState::Other(_)` rather than failing, so they did not error, but no named variant matched them.
+
 - **Requests now time out after 30 seconds.** The async client had no timeout at all, so a stalled connection or an unresponsive server hung the call forever. Every request - async and `blocking` - now has a 30-second total deadline and fails with `Error::Http`, where `is_timeout()` is true. This matches lettr-go, lettr-python, lettr-php and lettr-java.
 
   The timeout is not configurable. A call that legitimately runs longer than 30 seconds now fails where it used to wait. `blocking` users see no change, because `reqwest::blocking` already defaulted to 30 seconds.
+
+### Added
+
+- **`client.emails.list_scheduled()`** - lists what is queued, newest delivery time first, with `ListScheduledEmailsOptions` (`status`, `per_page`, `page`) and the usual `pagination`. There was previously no way to ask what was scheduled.
+- **`ScheduledEmail::request_id`, `accepted`, `rejected`, `tag` and `failure_reason`**, plus `is_cancellable()`, `is_sent()` and `is_cancelled()`. `ScheduledEmailState` gains `Sending`, `Sent` and `Cancelled`, with `is_cancellable()` and `is_terminal()`.
+- **`cancel_scheduled()` returns the cancelled `ScheduledEmail`** instead of `()`, so the state can be confirmed without a second call.
+
+### Changed
+
+- **`ScheduledTransmission` is now `ScheduledEmail`.** The old name remains as a deprecated type alias, so code that names the type keeps compiling. It was never a transmission: the provider does not know the email exists until it is sent.
+- **`schedule()` returns `ScheduledEmail`** instead of `SendEmailResponse`, and `schedule_with_quota()` returns the new `ScheduledEmailWithQuota`. The old types reported `accepted`/`rejected` as though the email had been sent, which it has not been; those counts are still there, alongside the state and the delivery time.
+
+  **The id `schedule()` gives you changed meaning.** `request_id` is Lettr's own id, prefixed `sch_`, and it is what `get_scheduled()` and `cancel_scheduled()` take. The provider's id is the separate `transmission_id`, which is `None` until the email is sent - and it is the value that appears on **webhook events**. Code that stored the id from `schedule()` to correlate webhooks needs `transmission_id` from a later read.
+- **The scheduling window is 5 minutes to 30 days**, up from 3 days. This client never validated it, so longer schedules simply work.
 
 ## [1.5.0] - 2026-09-10
 

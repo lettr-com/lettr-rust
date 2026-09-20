@@ -39,16 +39,44 @@ impl std::fmt::Display for EmailState {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum ScheduledEmailState {
-    Submitted,
-    Generating,
+    /// Waiting for its delivery time. The only state that can be cancelled.
     Scheduled,
-    Delivered,
-    Bounced,
+    /// Being handed to the sending provider right now.
+    Sending,
+    /// Sent. Delivery detail then comes from the email's events.
+    Sent,
+    /// Cancelled before it was sent.
+    Cancelled,
+    /// Sending was attempted and gave up. See [`ScheduledEmail::failure_reason`].
     Failed,
+    /// Returned by older API versions, which reported the provider's
+    /// transmission state here. Kept so code matching on them still compiles.
+    Submitted,
+    /// See [`ScheduledEmailState::Submitted`].
+    Generating,
+    /// See [`ScheduledEmailState::Submitted`].
+    Delivered,
+    /// See [`ScheduledEmailState::Submitted`].
+    Bounced,
+    /// See [`ScheduledEmailState::Submitted`].
     Unknown,
     /// A state not yet covered by this enum.
     #[serde(untagged)]
     Other(String),
+}
+
+impl ScheduledEmailState {
+    /// Whether the email can still be cancelled.
+    #[must_use]
+    pub fn is_cancellable(&self) -> bool {
+        matches!(self, Self::Scheduled)
+    }
+
+    /// Whether the email has reached a final state.
+    #[must_use]
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Sent | Self::Cancelled | Self::Failed)
+    }
 }
 
 impl std::fmt::Display for ScheduledEmailState {
@@ -57,6 +85,9 @@ impl std::fmt::Display for ScheduledEmailState {
             Self::Submitted => write!(f, "submitted"),
             Self::Generating => write!(f, "generating"),
             Self::Scheduled => write!(f, "scheduled"),
+            Self::Sending => write!(f, "sending"),
+            Self::Sent => write!(f, "sent"),
+            Self::Cancelled => write!(f, "cancelled"),
             Self::Delivered => write!(f, "delivered"),
             Self::Bounced => write!(f, "bounced"),
             Self::Failed => write!(f, "failed"),
@@ -137,6 +168,8 @@ impl EmailsSvc {
     ///     .with_text("Welcome!");
     ///
     /// let response = client.emails.send(email).await?;
+    /// // `request_id` is Lettr's own id (`sch_...`); `transmission_id` is the
+    /// // provider's, and stays None until the email is actually sent.
     /// println!("Request ID: {}", response.request_id);
     /// # Ok(())
     /// # }
@@ -372,16 +405,13 @@ impl EmailsSvc {
     /// # }
     /// ```
     #[maybe_async::maybe_async]
-    pub async fn schedule(
-        &self,
-        options: ScheduleEmailOptions,
-    ) -> crate::Result<SendEmailResponse> {
+    pub async fn schedule(&self, options: ScheduleEmailOptions) -> crate::Result<ScheduledEmail> {
         let request = self
             .0
             .build(Method::POST, "/emails/scheduled")
             .json(&options);
         let response = self.0.send(request).await?;
-        let wrapper = response.json::<SendEmailResponseWrapper>().await?;
+        let wrapper = response.json::<ScheduledEmailResponseWrapper>().await?;
         Ok(wrapper.data)
     }
 
@@ -414,18 +444,67 @@ impl EmailsSvc {
     pub async fn schedule_with_quota(
         &self,
         options: ScheduleEmailOptions,
-    ) -> crate::Result<SendEmailWithQuotaResponse> {
+    ) -> crate::Result<ScheduledEmailWithQuota> {
         let request = self
             .0
             .build(Method::POST, "/emails/scheduled")
             .json(&options);
         let response = self.0.send(request).await?;
         let quota = QuotaInfo::from_headers(response.headers());
-        let wrapper = response.json::<SendEmailResponseWrapper>().await?;
-        Ok(SendEmailWithQuotaResponse {
+        let wrapper = response.json::<ScheduledEmailResponseWrapper>().await?;
+        Ok(ScheduledEmailWithQuota {
             response: wrapper.data,
             quota,
         })
+    }
+
+    /// List scheduled emails, newest delivery time first.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use lettr::Lettr;
+    /// # use lettr::emails::{ListScheduledEmailsOptions, ScheduledEmailState};
+    /// # async fn run() -> lettr::Result<()> {
+    /// let client = Lettr::new("your-api-key");
+    ///
+    /// let page = client
+    ///     .emails
+    ///     .list_scheduled(
+    ///         ListScheduledEmailsOptions::new()
+    ///             .status(ScheduledEmailState::Scheduled)
+    ///             .per_page(25),
+    ///     )
+    ///     .await?;
+    ///
+    /// for email in &page.scheduled_emails {
+    ///     println!("{} → {:?}", email.request_id, email.scheduled_at);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[maybe_async::maybe_async]
+    pub async fn list_scheduled(
+        &self,
+        options: ListScheduledEmailsOptions,
+    ) -> crate::Result<ListScheduledEmailsResponse> {
+        let mut request = self.0.build(Method::GET, "/emails/scheduled");
+
+        if let Some(ref status) = options.status {
+            request = request.query(&[("status", status.to_string())]);
+        }
+        if let Some(per_page) = options.per_page {
+            request = request.query(&[("per_page", per_page.to_string())]);
+        }
+        if let Some(page) = options.page {
+            request = request.query(&[("page", page.to_string())]);
+        }
+
+        let response = self.0.send(request).await?;
+        let wrapper = response
+            .json::<ListScheduledEmailsResponseWrapper>()
+            .await?;
+        Ok(wrapper.data)
     }
 
     /// Retrieve details of a scheduled email.
@@ -437,22 +516,17 @@ impl EmailsSvc {
     /// # async fn run() -> lettr::Result<()> {
     /// let client = Lettr::new("your-api-key");
     ///
-    /// let scheduled = client.emails.get_scheduled("12345678901234567890").await?;
+    /// let scheduled = client.emails.get_scheduled("sch_01JQZ3N2K8XW9V6M4TBRC7YHDE").await?;
     /// println!("State: {}, Scheduled at: {:?}", scheduled.state, scheduled.scheduled_at);
     /// # Ok(())
     /// # }
     /// ```
     #[maybe_async::maybe_async]
-    pub async fn get_scheduled(
-        &self,
-        transmission_id: &str,
-    ) -> crate::Result<ScheduledTransmission> {
-        let path = format!("/emails/scheduled/{transmission_id}");
+    pub async fn get_scheduled(&self, request_id: &str) -> crate::Result<ScheduledEmail> {
+        let path = format!("/emails/scheduled/{request_id}");
         let request = self.0.build(Method::GET, &path);
         let response = self.0.send(request).await?;
-        let wrapper = response
-            .json::<ScheduledTransmissionResponseWrapper>()
-            .await?;
+        let wrapper = response.json::<ScheduledEmailResponseWrapper>().await?;
         Ok(wrapper.data)
     }
 
@@ -465,17 +539,18 @@ impl EmailsSvc {
     /// # async fn run() -> lettr::Result<()> {
     /// let client = Lettr::new("your-api-key");
     ///
-    /// client.emails.cancel_scheduled("12345678901234567890").await?;
-    /// println!("Scheduled email cancelled.");
+    /// let cancelled = client.emails.cancel_scheduled("sch_01JQZ3N2K8XW9V6M4TBRC7YHDE").await?;
+    /// println!("State: {}", cancelled.state);
     /// # Ok(())
     /// # }
     /// ```
     #[maybe_async::maybe_async]
-    pub async fn cancel_scheduled(&self, transmission_id: &str) -> crate::Result<()> {
-        let path = format!("/emails/scheduled/{transmission_id}");
+    pub async fn cancel_scheduled(&self, request_id: &str) -> crate::Result<ScheduledEmail> {
+        let path = format!("/emails/scheduled/{request_id}");
         let request = self.0.build(Method::DELETE, &path);
-        self.0.send(request).await?;
-        Ok(())
+        let response = self.0.send(request).await?;
+        let wrapper = response.json::<ScheduledEmailResponseWrapper>().await?;
+        Ok(wrapper.data)
     }
 }
 
@@ -1129,7 +1204,7 @@ pub struct ScheduleEmailOptions {
     pub email: CreateEmailOptions,
 
     /// The UTC date/time when the email should be sent (ISO 8601).
-    /// Must be at least 5 minutes in the future and within 3 days.
+    /// Must be at least 5 minutes in the future and within 30 days.
     pub scheduled_at: String,
 }
 
@@ -1628,18 +1703,30 @@ pub struct GeoIp {
 }
 
 #[derive(Debug, Deserialize)]
-struct ScheduledTransmissionResponseWrapper {
+struct ScheduledEmailResponseWrapper {
     #[allow(dead_code)]
     message: String,
-    data: ScheduledTransmission,
+    data: ScheduledEmail,
 }
 
-/// A scheduled email transmission.
+/// An email scheduled for later delivery.
+///
+/// Two ids, and they are not interchangeable:
+///
+/// - [`request_id`](Self::request_id) (`sch_...`) identifies the scheduled
+///   email for its whole life, and is what [`get_scheduled`](EmailsSvc::get_scheduled)
+///   and [`cancel_scheduled`](EmailsSvc::cancel_scheduled) take.
+/// - [`transmission_id`](Self::transmission_id) is the sending provider's id.
+///   It is `None` until the email is actually sent, and it is the value that
+///   appears on webhook events, so use it to correlate them.
 #[derive(Debug, Clone, Deserialize)]
-pub struct ScheduledTransmission {
-    /// Unique transmission ID.
-    pub transmission_id: String,
-    /// Current state of the transmission.
+pub struct ScheduledEmail {
+    /// Lettr's own id for the scheduled email (`sch_...`).
+    pub request_id: String,
+    /// The sending provider's id. `None` until the email is sent.
+    #[serde(default)]
+    pub transmission_id: Option<String>,
+    /// Current state of the scheduled email.
     pub state: ScheduledEmailState,
     /// Scheduled delivery time (ISO 8601).
     #[serde(default)]
@@ -1650,11 +1737,126 @@ pub struct ScheduledTransmission {
     #[serde(default)]
     pub from_name: Option<String>,
     /// Email subject line.
-    pub subject: String,
+    #[serde(default)]
+    pub subject: Option<String>,
     /// List of recipient email addresses.
+    #[serde(default)]
     pub recipients: Vec<String>,
     /// Total number of recipients.
+    #[serde(default)]
     pub num_recipients: u32,
-    /// Delivery events for this transmission.
+    /// Recipients accepted for delivery.
+    #[serde(default)]
+    pub accepted: u32,
+    /// Recipients rejected.
+    #[serde(default)]
+    pub rejected: u32,
+    /// The caller's tag, if one was set.
+    #[serde(default)]
+    pub tag: Option<String>,
+    /// Why sending failed, when the state is [`ScheduledEmailState::Failed`].
+    #[serde(default)]
+    pub failure_reason: Option<String>,
+    /// Delivery events. Empty until the email has been sent.
+    #[serde(default)]
     pub events: Vec<EmailEvent>,
+}
+
+impl ScheduledEmail {
+    /// Whether the email can still be cancelled.
+    #[must_use]
+    pub fn is_cancellable(&self) -> bool {
+        self.state.is_cancellable()
+    }
+
+    /// Whether the email has been handed to the sending provider.
+    #[must_use]
+    pub fn is_sent(&self) -> bool {
+        self.state == ScheduledEmailState::Sent
+    }
+
+    /// Whether the email was cancelled before it was sent.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.state == ScheduledEmailState::Cancelled
+    }
+}
+
+/// A scheduled email plus any quota headers the response carried.
+#[derive(Debug, Clone)]
+pub struct ScheduledEmailWithQuota {
+    /// The scheduled email.
+    pub response: ScheduledEmail,
+    /// Quota information, present for free-tier teams.
+    pub quota: Option<QuotaInfo>,
+}
+
+/// Former name of [`ScheduledEmail`].
+#[deprecated(since = "1.6.0", note = "renamed to ScheduledEmail")]
+pub type ScheduledTransmission = ScheduledEmail;
+
+/// Options for listing scheduled emails.
+#[must_use]
+#[derive(Debug, Default, Clone)]
+pub struct ListScheduledEmailsOptions {
+    status: Option<ScheduledEmailState>,
+    per_page: Option<u32>,
+    page: Option<u32>,
+}
+
+impl ListScheduledEmailsOptions {
+    /// Creates new [`ListScheduledEmailsOptions`] with default values.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Only return scheduled emails in this state.
+    #[inline]
+    pub fn status(mut self, status: ScheduledEmailState) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    /// Results per page (1-100). Defaults to 25.
+    #[inline]
+    pub fn per_page(mut self, per_page: u32) -> Self {
+        self.per_page = Some(per_page);
+        self
+    }
+
+    /// Page number. Defaults to 1.
+    #[inline]
+    pub fn page(mut self, page: u32) -> Self {
+        self.page = Some(page);
+        self
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ListScheduledEmailsResponseWrapper {
+    #[allow(dead_code)]
+    message: String,
+    data: ListScheduledEmailsResponse,
+}
+
+/// Response from listing scheduled emails.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListScheduledEmailsResponse {
+    /// The requested page of scheduled emails, newest delivery time first.
+    pub scheduled_emails: Vec<ScheduledEmail>,
+    /// Pagination information.
+    pub pagination: ScheduledEmailPagination,
+}
+
+/// Pagination information for scheduled email lists.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ScheduledEmailPagination {
+    /// Total number of scheduled emails matching the filter.
+    pub total: u64,
+    /// Results per page.
+    pub per_page: u32,
+    /// Current page number.
+    pub current_page: u32,
+    /// Last page number.
+    pub last_page: u32,
 }

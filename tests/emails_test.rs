@@ -288,9 +288,20 @@ async fn schedule_email() {
         .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
             "message": "Email scheduled for delivery.",
             "data": {
-                "request_id": "sched-001",
+                "request_id": "sch_01JQZ3N2K8XW9V6M4TBRC7YHDE",
+                "transmission_id": null,
+                "state": "scheduled",
+                "scheduled_at": "2024-01-16T10:00:00Z",
+                "from": "sender@example.com",
+                "from_name": null,
+                "subject": "Scheduled!",
+                "recipients": ["user@example.com"],
+                "num_recipients": 1,
                 "accepted": 1,
-                "rejected": 0
+                "rejected": 0,
+                "tag": "receipts",
+                "failure_reason": null,
+                "events": []
             }
         })))
         .mount(&server)
@@ -303,8 +314,17 @@ async fn schedule_email() {
 
     let options = lettr::emails::ScheduleEmailOptions::new(email, "2024-01-16T10:00:00Z");
     let response = client.emails.schedule(options).await.unwrap();
-    assert_eq!(response.request_id, "sched-001");
+
+    // Lettr's own id, not the provider's transmission id.
+    assert_eq!(response.request_id, "sch_01JQZ3N2K8XW9V6M4TBRC7YHDE");
+    assert_eq!(response.transmission_id, None);
+    assert_eq!(
+        response.state,
+        lettr::emails::ScheduledEmailState::Scheduled
+    );
+    assert!(response.is_cancellable());
     assert_eq!(response.accepted, 1);
+    assert_eq!(response.tag.as_deref(), Some("receipts"));
 }
 
 #[tokio::test]
@@ -316,14 +336,21 @@ async fn get_scheduled_email() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "message": "Scheduled transmission retrieved successfully.",
             "data": {
-                "transmission_id": "12345678901234567890",
-                "state": "submitted",
+                "request_id": "sch_01JQZ3N2K8XW9V6M4TBRC7YHDE",
+                // Null for the whole life of a scheduled email that has not
+                // been sent — this is what used to fail to deserialize.
+                "transmission_id": null,
+                "state": "scheduled",
                 "scheduled_at": "2024-01-16T10:00:00+00:00",
                 "from": "sender@example.com",
                 "from_name": "Sender Name",
                 "subject": "Scheduled Newsletter",
                 "recipients": ["recipient@example.com"],
                 "num_recipients": 1,
+                "accepted": 1,
+                "rejected": 0,
+                "tag": null,
+                "failure_reason": null,
                 "events": []
             }
         })))
@@ -337,10 +364,10 @@ async fn get_scheduled_email() {
         .await
         .unwrap();
 
-    assert_eq!(response.transmission_id, "12345678901234567890");
+    assert_eq!(response.transmission_id, None);
     assert_eq!(
         response.state,
-        lettr::emails::ScheduledEmailState::Submitted
+        lettr::emails::ScheduledEmailState::Scheduled
     );
     assert_eq!(
         response.scheduled_at.as_deref(),
@@ -348,7 +375,7 @@ async fn get_scheduled_email() {
     );
     assert_eq!(response.from, "sender@example.com");
     assert_eq!(response.from_name.as_deref(), Some("Sender Name"));
-    assert_eq!(response.subject, "Scheduled Newsletter");
+    assert_eq!(response.subject.as_deref(), Some("Scheduled Newsletter"));
     assert!(response.events.is_empty());
 }
 
@@ -358,16 +385,118 @@ async fn cancel_scheduled_email() {
 
     Mock::given(method("DELETE"))
         .and(path("/emails/scheduled/12345678901234567890"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "message": "Scheduled transmission cancelled successfully.",
+            "data": {
+                "request_id": "sch_01JQZ3N2K8XW9V6M4TBRC7YHDE",
+                "transmission_id": null,
+                "state": "cancelled",
+                "scheduled_at": "2024-01-16T10:00:00Z",
+                "from": "sender@example.com",
+                "from_name": null,
+                "subject": "Scheduled Newsletter",
+                "recipients": ["recipient@example.com"],
+                "num_recipients": 1,
+                "accepted": 0,
+                "rejected": 0,
+                "tag": null,
+                "failure_reason": null,
+                "events": []
+            }
+        })))
         .mount(&server)
         .await;
 
     let client = client(&server);
-    client
+    let cancelled = client
         .emails
         .cancel_scheduled("12345678901234567890")
         .await
         .unwrap();
+
+    assert_eq!(
+        cancelled.state,
+        lettr::emails::ScheduledEmailState::Cancelled
+    );
+    assert!(cancelled.is_cancelled());
+    assert!(!cancelled.is_cancellable());
+    // Never handed over, so there is no provider id and nothing was accepted.
+    assert_eq!(cancelled.transmission_id, None);
+    assert_eq!(cancelled.accepted, 0);
+}
+
+#[tokio::test]
+async fn list_scheduled_emails() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/emails/scheduled"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "message": "Scheduled emails retrieved successfully.",
+            "data": {
+                "scheduled_emails": [{
+                    "request_id": "sch_01JQZ3N2K8XW9V6M4TBRC7YHDE",
+                    "transmission_id": null,
+                    "state": "scheduled",
+                    "scheduled_at": "2024-01-16T10:00:00Z",
+                    "from": "sender@example.com",
+                    "from_name": null,
+                    "subject": "Scheduled Newsletter",
+                    "recipients": ["recipient@example.com"],
+                    "num_recipients": 1,
+                    "accepted": 1,
+                    "rejected": 0,
+                    "tag": null,
+                    "failure_reason": null,
+                    "events": []
+                }],
+                "pagination": {
+                    "total": 62,
+                    "per_page": 25,
+                    "current_page": 1,
+                    "last_page": 3
+                }
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let client = client(&server);
+    let page = client
+        .emails
+        .list_scheduled(
+            lettr::emails::ListScheduledEmailsOptions::new()
+                .status(lettr::emails::ScheduledEmailState::Scheduled)
+                .per_page(25),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(page.scheduled_emails.len(), 1);
+    assert_eq!(
+        page.scheduled_emails[0].request_id,
+        "sch_01JQZ3N2K8XW9V6M4TBRC7YHDE"
+    );
+    assert_eq!(page.pagination.total, 62);
+    assert_eq!(page.pagination.last_page, 3);
+}
+
+#[tokio::test]
+async fn scheduled_email_states_deserialize() {
+    // Every state the API can send, including the ones that used to be a hard
+    // deserialize error.
+    for (raw, expected) in [
+        ("scheduled", lettr::emails::ScheduledEmailState::Scheduled),
+        ("sending", lettr::emails::ScheduledEmailState::Sending),
+        ("sent", lettr::emails::ScheduledEmailState::Sent),
+        ("cancelled", lettr::emails::ScheduledEmailState::Cancelled),
+        ("failed", lettr::emails::ScheduledEmailState::Failed),
+    ] {
+        let parsed: lettr::emails::ScheduledEmailState =
+            serde_json::from_value(serde_json::Value::String(raw.to_string())).unwrap();
+        assert_eq!(parsed, expected, "state {raw} should deserialize");
+        assert_eq!(parsed.to_string(), raw);
+    }
 }
 
 #[tokio::test]
