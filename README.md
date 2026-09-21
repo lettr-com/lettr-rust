@@ -12,7 +12,7 @@ Add `lettr` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lettr = "1.6"
+lettr = "1.7"
 ```
 
 Or with the Cargo CLI:
