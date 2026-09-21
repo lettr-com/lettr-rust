@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-21
+
+Scheduled emails are now Lettr's own, not the sending provider's, and this release follows the API that made them so. `get_scheduled()` was returning `Err` for every email that had not been sent yet; that is fixed, and `list_scheduled()` is new. Upgrading needs two changes at most: `schedule()` and `schedule_with_quota()` return the new `ScheduledEmail` and `ScheduledEmailWithQuota`, and the id they hand back is now Lettr's `sch_` id rather than the provider's - if you stored that id to correlate **webhook events**, read `transmission_id` instead. `ScheduledTransmission` still compiles, as a deprecated alias.
+
 ### Fixed
 
 - **`get_scheduled()` failed for every scheduled email that had not been sent yet.** The API now returns `transmission_id: null` until the email is actually handed to the sending provider, and `ScheduledTransmission.transmission_id` was a `String`, so serde rejected the response outright - the call returned `Err` rather than the email. The field is now `Option<String>`.
@@ -236,7 +240,8 @@ Promotes the current API surface to a stable `1.0.0` release. No code changes si
 - `GET /health`, `GET /auth/check` — health and auth endpoints
 - `native-tls`, `rustls-tls`, `blocking` feature flags
 
-[Unreleased]: https://github.com/lettr-com/lettr-rust/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/lettr-com/lettr-rust/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/lettr-com/lettr-rust/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/lettr-com/lettr-rust/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/lettr-com/lettr-rust/compare/1.4.1...v1.5.0
 [1.4.1]: https://github.com/lettr-com/lettr-rust/compare/1.4.0...1.4.1
